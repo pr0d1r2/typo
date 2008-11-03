@@ -75,3 +75,14 @@ describe ArticlesController, "feeds" do
     response.should render_template("_rss20_feed")
   end
 end
+
+describe ArticlesController, "search" do
+  integrate_views
+
+  it "should have @keywords setted to work" do
+    lambda {
+      get "search", :q => "body"
+      response.should render_template("index")
+    }.should_not raise_error(ActionView::TemplateError)
+  end
+end

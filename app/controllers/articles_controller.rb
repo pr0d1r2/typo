@@ -53,6 +53,7 @@ class ArticlesController < ContentController
 
   def search
     @articles = this_blog.articles_matching(params[:q])
+    @keywords = (this_blog.meta_keywords.empty?) ? "" : this_blog.keywords
     render_paginated_index("No articles found...")
   end
 
