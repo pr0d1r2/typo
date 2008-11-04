@@ -82,7 +82,8 @@ describe ArticlesController, "search" do
   it "should have @keywords setted to work" do
     lambda {
       get "search", :q => "body"
-      response.should render_template("index")
     }.should_not raise_error(ActionView::TemplateError)
+    response.should render_template(:index)
+    assigns[:keywords].should_not == nil
   end
 end
