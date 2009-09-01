@@ -8,3 +8,5 @@ db/schema.rb
 .DS_Store
 installer/rails_installer.yml
 tmp/*
+spec/public
+doc/api
