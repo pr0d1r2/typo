@@ -1,9 +1,17 @@
 class CommentsController < FeedbackController
   before_filter :check_request_type, :only => [:create]
+  before_filter :get_article, :only => [:create, :preview]
 
   def create
     @comment = @article.with_options(new_comment_defaults) do |art|
       art.add_comment(params[:comment].symbolize_keys)
+    end
+
+    unless current_user.nil? or session[:user_id].nil?
+      # maybe useless, but who knows ?
+      if current_user.id == session[:user_id]
+        @comment.user_id = current_user.id
+      end
     end
 
     set_comment_cookies
@@ -12,13 +20,13 @@ class CommentsController < FeedbackController
       if request.xhr?
         render :partial => '/articles/comment', :object => @comment
       else
-        redirect_to article_path(@article)
+        redirect_to @article.permalink_url
       end
     else
       if request.xhr?
         render :partial => '/articles/comment_failed', :object => @comment
       else
-        redirect_to article_path(@article)
+        redirect_to @article.permalink_url
       end      
     end
   end
@@ -36,7 +44,11 @@ class CommentsController < FeedbackController
     set_headers
     @comment = Comment.new(params[:comment])
 
-    render :template => 'articles/comment_preview'
+    unless @article.comments_closed?
+      render :template => 'articles/comment_preview'
+    else
+      render :text => 'Comment are closed'
+    end
   end
 
   protected
@@ -44,7 +56,7 @@ class CommentsController < FeedbackController
   def get_feedback
     @comments = \
       if params[:article_id]
-        Article.find_by_params_hash(params).published_comments
+        Article.find(params[:article_id]).published_comments
       else
         Comment.find_published(:all, this_blog.rss_limit_params.merge(:order => 'created_at DESC'))
       end
@@ -57,7 +69,7 @@ class CommentsController < FeedbackController
       :user       => @current_user,
       :user_agent => request.env['HTTP_USER_AGENT'],
       :referrer   => request.env['HTTP_REFERER'],
-      :permalink  => article_path(@article) }
+      :permalink  => @article.permalink_url }
   end
 
   def set_headers
@@ -76,5 +88,9 @@ class CommentsController < FeedbackController
       add_to_cookies(:gravatar_id, Digest::MD5.hexdigest(@comment.email.strip))
     end
     add_to_cookies(:url, @comment.url)
+  end
+
+  def get_article
+    @article = Article.find(params[:article_id])
   end
 end

@@ -5,9 +5,6 @@ describe TagsController, "/index" do
     Tag.stub!(:find_all_with_article_counters) \
       .and_return(mock('tags', :null_object => true))
 
-    controller.stub!(:template_exists?) \
-      .and_return(true)
-
     this_blog = Blog.default
     controller.stub!(:this_blog) \
       .and_return(this_blog)
@@ -22,7 +19,11 @@ describe TagsController, "/index" do
     response.should be_success
   end
 
-  it "should render :index" do
+  it "should render :index"
+  if false
+    controller.stub!(:template_exists?) \
+      .and_return(true)
+
     do_get
     response.should render_template(:index)
   end
@@ -41,15 +42,11 @@ describe TagsController, '/articles/tag/foo' do
     @tag = mock('tag', :null_object => true)
     @tag.stub!(:empty?) \
       .and_return(false)
+    @tag.stub!(:name).and_return('foo')
 
     Tag.stub!(:find_by_permalink) \
       .and_return(@tag)
 
-    ActionController::Pagination::Paginator.stub!(:new) \
-      .and_return(mock('pages', :null_object => true))
-
-    controller.stub!(:template_exists?) \
-      .and_return(true)
     this_blog = Blog.default
     controller.stub!(:this_blog) \
       .and_return(this_blog)
@@ -67,11 +64,16 @@ describe TagsController, '/articles/tag/foo' do
   it 'should call Tag.find_by_permalink' do
     Tag.should_receive(:find_by_permalink) \
       .with('foo') \
-      .and_return(mock('tag', :null_object => true))
-    do_get
+      .and_raise(ActiveRecord::RecordNotFound)
+    lambda do
+      do_get
+    end.should raise_error(ActiveRecord::RecordNotFound)
   end
 
-  it 'should render :show by default' do
+  it 'should render :show by default'
+  if false
+    controller.stub!(:template_exists?) \
+      .and_return(true)
     do_get
     response.should render_template(:show)
   end
@@ -90,13 +92,13 @@ describe TagsController, '/articles/tag/foo' do
   end
 
   it 'should render an error when the tag is empty' do
-    @tag.should_receive(:published_articles) \
+    @tag.should_receive(:articles) \
       .and_return([])
 
     do_get
 
-    response.should render_template('articles/error')
-    assigns[:message].should == "Can't find any articles for 'foo'"
+    response.status.should == "301 Moved Permanently"
+    response.should redirect_to(Blog.default.base_url)
   end
 
   it 'should render the atom feed for /articles/tag/foo.atom' do
@@ -108,6 +110,23 @@ describe TagsController, '/articles/tag/foo' do
     get 'show', :id => 'foo', :format => 'rss'
     response.should render_template('articles/_rss20_feed')
   end
+end
+
+describe TagsController, 'with integrate_view' do
+  integrate_views
+
+  before(:each) do
+    get 'show', :id => 'foo'
+  end
+
+  it 'should have good rss feed link in head' do
+    response.should have_tag('head>link[href=?]','http://test.host/tag/foo.rss')
+  end
+
+  it 'should have good atom feed link in head' do
+    response.should have_tag('head>link[href=?]','http://test.host/tag/foo.atom')
+  end
+
 end
 
 ## Old tests that still need conversion

@@ -1,9 +1,4 @@
-require File.dirname(__FILE__) + '/../../../test/test_helper'
 require File.dirname(__FILE__) + '/../../spec_helper'
-require 'admin/categories_controller'
-
-# Re-raise errors caught by the controller.
-class Admin::CategoriesController; def rescue_action(e) raise e end; end
 
 describe Admin::CategoriesController do
   integrate_views
@@ -31,7 +26,7 @@ describe Admin::CategoriesController do
     get :edit, :id => categories(:software).id
     assert_template 'new'
     assert_template_has 'category'
-    assert_valid assigns(:category)
+    assert assigns(:category).valid?
   end
 
   def test_update
@@ -73,7 +68,7 @@ describe Admin::CategoriesController do
     assert_response :success
     assert_template "_categories"
     assert_tag :tag => "table",
-      :children => { :count => Category.count + 1,
+      :children => { :count => Category.count + 2,
         :only => { :tag => "tr",
           :children => { :count => 2,
             :only => { :tag => /t[dh]/ } } } }

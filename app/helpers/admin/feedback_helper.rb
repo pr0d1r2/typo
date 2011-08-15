@@ -1,6 +1,5 @@
 module Admin::FeedbackHelper
-  def link_to_article_edit(article)
-    link_to truncate(article.title, 60), :controller => '/admin/content', :action => 'edit', :id => article.id
+  def comment_class state
+    (state.to_s =~ /Ham/) ? 'published' : 'unpublished'
   end
-
 end

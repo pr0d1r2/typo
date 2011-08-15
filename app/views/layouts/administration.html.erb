@@ -1,54 +1,55 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
-	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-	<meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-	<title>Typo Administration:  <%= controller.controller_name %></title>
-	<meta http-equiv="imagetoolbar" content="no" />
-	<%= javascript_include_tag :fckeditor %>
-	<%= stylesheet_link_tag "administration", "lightbox" %>
+  <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
+  <title>Typo Administration:  <%= controller.controller_name %></title>
+  <meta http-equiv="imagetoolbar" content="no" />
+  <%= stylesheet_link_tag "growler", "administration", "lightbox" %>
   <%= stylesheet_link_tag "administration_rtl" if ( _("Localization.rtl") == "1") %>
-	<%= javascript_include_tag "prototype", "effects", "dragdrop", "controls", "typo", "lightbox" %>
+  <%= javascript_include_tag "prototype", "effects", "dragdrop", "controls", "typo", "lightbox", "quicktags", "growler", "administration", :fckeditor %>
+  <%= calendar_date_select_includes %>
 </head>
 
 <body>
-	<div id="container">
-		<div id="topnav">
-			<ul id="tabs">
-				<% for pm in current_user.project_modules %>
-					<%= content_tag :li, (link_to _(pm.human_name), pm.menus.first.url), :class => send("class_#{pm.name}") %>
-				<% end %>
-				<li class="right"><%= link_to _("log out"), :controller => "/accounts", :action=>"logout" %></li>
-				<li class="right"><%= link_to _('your blog'), this_blog.base_url %>
-			</ul>
-		</div>
-		<% if not @_render_stack.first =~ /login|signup|logout/ %>
-		<div class="tasks">
-			<ul>
-				<%= yield :tasks %>
-			</ul>
-			<div style="clear:both;"></div>
-		</div>
-		<% end %>
+  <div id="container">
+    <div id="topnav">
+      <ul id="tabs">
+        <li class="right"><%= link_to _('your blog'), this_blog.base_url %></li>
+        <li class="right"><%= link_to _("log out"), :controller => "/accounts", :action=>"logout" %></li>
+        <li <%='class="current"' if controller.controller_name == 'dashboard' %>><%= link_to _('Dashboard'), :controller => '/admin' %></li>
+        <% for pm in current_user.project_modules %>
+          <%= content_tag :li, (link_to _(pm.human_name), pm.menus.first.url), :class => send("class_#{pm.name}") %>
+        <% end %>
+      </ul>
+    </div>
+    <% if (@_first_render =~ /login|signup|logout/) %>
+    <% else %>
+    <div id="subtabs">
+      <ul>
+        <%= yield :tasks %>
+      </ul>
+      <div style="clear:both;"></div>
+    </div>
+    <% end %>
 
+    <div id="overall">
+      <% if flash[:notice] or flash[:error] %>
+      <div id="flash">
+        <%= render_flash rescue nil %>
+      </div>
+      <% end %>
 
-		<div id="overall">
-			<% if flash[:notice] or flash[:error] %>
-			<div id="flash">
-				<%= render_flash rescue nil %>
-			</div>
-			<% end %>
+      <div id="main">
+        <%= show_page_heading %>
 
-			<div id="main">
-				<h2><%= @page_heading %></h2>
+        <%= yield  %>
+      </div>
+    </div>
+    <div id="footer">
+      Typo <%=h TYPO_VERSION %>
+    </div>
 
-				<%= yield  %>
-			</div>
-		</div>
-		<div id="footer">
-			Typo <%=h TYPO_VERSION %> <%= _("with %s AER OS XK iconset %s", '<a href="http://gnome-look.org/content/show.php/AER-OS-XK?content=49990">', '</a>') %>
-		</div>
-		
-	</div>
+  </div>
 </body>
 </html>

@@ -1,4 +1,4 @@
-<% form_remote_tag :url => comments_path(@article),
+<% form_remote_tag :url => @article.comment_url,
                     :position=> :bottom,
                     :update => {:success => 'commentList'},
                     :loading => "loading()",
@@ -16,7 +16,7 @@
   <table cellpadding="4" cellspacing="0" class="frm-tbl">
     <tr>
       <td><p><label for="comment_author"><%= _("Your name")%></label></p></td>
-      <td> <%= text_field "comment", "author", :size => 20 %> <small><%= link_to_function("(leave url/email &#187;)", "Element.toggle('guest_url'); Element.toggle('guest_email')") %></small></td>
+      <td> <%= text_field "comment", "author", :size => 20 %> <small><%= link_to_function(_("(leave url/email &#187;)"), "Element.toggle('guest_url'); Element.toggle('guest_email')") %></small></td>
     </tr>
     <tr id="guest_url" style="display:none;">
       <td><p><label for="comment_url"><%= _("Your blog")%></label></p></td>
@@ -36,7 +36,7 @@
       <td colspan="2" id="frm-btns">
       <span id="comment_loading" style="display:none;"><%= image_tag "spinner.gif" %></span>&nbsp;&nbsp;
       <%= markup_help_popup TextFilter.find_by_name(this_blog.comment_text_filter), _("Comment Markup Help") %>
-      <a href="#" onclick="new Ajax.Updater('preview', '<%= preview_new_comment_path(@article) %>',  {asynchronous:true, evalScripts:true, parameters:Form.serialize('commentform'), onComplete:function(request){Element.show('preview')}}); return false;"><%= _("Preview comment")%></a>
+      <a href="#" onclick="new Ajax.Updater('preview', '<%= @article.preview_comment_url %>',  {asynchronous:true, evalScripts:true, parameters:Form.serialize('commentform'), onComplete:function(request){Element.show('preview')}}); return false;"><%= _("Preview comment")%></a>
       <input type="submit" name="submit" id="form-submit-button" value="submit" class="button" />
       </td>
     </tr>

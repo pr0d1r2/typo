@@ -1,66 +1,27 @@
 require 'base64'
+
 module Admin; end
 class Admin::ContentController < Admin::BaseController
   layout "administration", :except => [:show, :autosave]
+
+  cache_sweeper :blog_sweeper
 
   def auto_complete_for_article_keywords
     @items = Tag.find_with_char params[:article][:keywords].strip
     render :inline => "<%= auto_complete_result @items, 'name' %>"
   end
   
-  def build_filter_params
-    @conditions = ["state in('published', 'withdrawn')"]
-    if params[:search]
-      @search = params[:search]
-
-      if @search[:searchstring]
-        tokens = @search[:searchstring].split.collect {|c| "%#{c.downcase}%"}
-        @conditions = [(["(LOWER(body) LIKE ? OR LOWER(extended) LIKE ? OR LOWER(title) LIKE ?)"] * tokens.size).join(" AND "), *tokens.collect { |token| [token] * 3 }.flatten]
-        return
-      end
-
-      if @search[:published_at] and %r{(\d\d\d\d)-(\d\d)} =~ @search[:published_at]
-        @conditions[0] += " AND published_at LIKE ? "
-        @conditions << "%#{@search[:published_at]}%"
-      end
-
-      if @search[:user_id] and @search[:user_id].to_i > 0
-        @conditions[0] += " AND user_id = ? "
-        @conditions << @search[:user_id]
-      end
-      
-      if @search[:published] and @search[:published].to_s =~ /0|1/
-        @conditions[0] += " AND published = ? "
-        @conditions << @search[:published]
-      end
-      
-      if @search[:category] and @search[:category].to_i > 0
-        @conditions[0] += " AND categorizations.category_id = ? "
-        @conditions << @search[:category]
-      end
-  
-    else
-      @search = { :category => nil, :user_id => nil, :published_at => nil, :published => nil }
-    end    
-  end
-
   def index
-    @drafts = Article.find(:all, :conditions => "state='draft'")
-    now = Time.now
-    build_filter_params
+    @drafts = Article.draft.all
     setup_categories
-    @articles = Article.paginate :page => params[:page], :conditions => @conditions, :order => 'created_at DESC', :per_page => 10
+    @search = params[:search] ? params[:search] : {}
+    @articles = Article.search_no_draft_paginate(@search, :page => params[:page], :per_page => this_blog.admin_display_elements)
     
     if request.xhr?
       render :partial => 'article_list', :object => @articles
-      return
+    else
+      @article = Article.new(params[:article])
     end
-    
-    @article = Article.new(params[:article])
-  end
-
-  def show
-    @article = Article.find(params[:id])
   end
 
   def new 
@@ -71,9 +32,10 @@ class Admin::ContentController < Admin::BaseController
     @drafts = Article.find(:all, :conditions => "state='draft'")
     @article = Article.find(params[:id])
     
-    if current_user.profile.label != 'admin' and article.user_id != current_user.id 
+    unless @article.access_by? current_user 
       redirect_to :action => 'index'
       flash[:error] = _("Error, you are not allowed to perform this action")
+      return
     end
     new_or_edit 
   end
@@ -81,15 +43,25 @@ class Admin::ContentController < Admin::BaseController
   def destroy
     @article = Article.find(params[:id])
     
-    if current_user.profile.label != 'admin' and @article.user_id != current_user.id 
+    unless @article.access_by?(current_user)
       redirect_to :action => 'index'
       flash[:error] = _("Error, you are not allowed to perform this action")
+      return
     end
     
     if request.post?
       @article.destroy
       redirect_to :action => 'index'
+      return
     end
+  end
+
+  def insert_editor
+    return unless params[:editor].to_s =~ /simple|visual/
+    current_user.editor = params[:editor].to_s
+    current_user.save!
+    
+    render :partial => "#{params[:editor].to_s}_editor"
   end
 
   def category_add; do_add_or_remove_fu; end
@@ -116,21 +88,6 @@ class Admin::ContentController < Admin::BaseController
     end
   end
 
-  def build_extended
-    if @article.body =~ /<!--more-->/
-      body = @article.body.split('<!--more-->')
-      @article.body = body[0]
-      @article.extended = body[1]
-    end
-    
-  end
-  
-  def get_extended
-    unless @article.extended.blank?
-      @article.body = @article.body + "\n<!--more-->\n" + @article.extended
-    end    
-  end
-
   def autosave
     get_or_build_article
     unless @article.published
@@ -147,7 +104,7 @@ class Admin::ContentController < Admin::BaseController
       @article.state = "draft" unless @article.state == "withdrawn"
       if @article.save
         render(:update) do |page|
-          page.replace_html('autosave', _("Article was successfully saved at ") + Time.now.to_s + "<input type='hidden' name='id' value='#{@article.id}' />")
+          page.replace_html('autosave', hidden_field_tag('id', @article.id))
           page.replace_html('permalink', text_field('article', 'permalink'))
         end
 
@@ -156,6 +113,7 @@ class Admin::ContentController < Admin::BaseController
     end
     render :text => nil
   end
+
   protected
 
   attr_accessor :resources, :categories, :resource, :category
@@ -174,18 +132,19 @@ class Admin::ContentController < Admin::BaseController
 
   def new_or_edit
     get_or_build_article
+    @macros = TextFilter.available_filters.select { |filter| TextFilterPlugin::Macro > filter }
     @article.published = true
     
+    # TODO Test if we can delete the next line. It's delete on nice_permalinks branch
     params[:article] ||= {}
 
-    @resources = Resource.find(:all, :order => 'created_at DESC')
+    @resources = Resource.find(:all, :order => 'filename')
     @article.attributes = params[:article]
     
     setup_categories
     @selected = @article.categories.collect { |c| c.id }
-    @drafts = Article.find(:all, :conditions => "state='draft'")
+    @drafts = Article.drafts
     if request.post?
-      build_extended
       set_article_author
       save_attachments
       @article.state = "draft" if @article.draft
@@ -195,8 +154,6 @@ class Admin::ContentController < Admin::BaseController
         redirect_to :action => 'index'
         return
       end
-    else
-      get_extended
     end
     render :action => 'new'
   end
@@ -256,6 +213,7 @@ class Admin::ContentController < Admin::BaseController
                returning(Article.new) do |art|
                  art.allow_comments = this_blog.default_allow_comments
                  art.allow_pings    = this_blog.default_allow_pings
+                 art.text_filter    = current_user.text_filter
                end
             else
               Article.find(params[:id])

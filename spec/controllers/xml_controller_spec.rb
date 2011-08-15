@@ -1,5 +1,4 @@
 require File.dirname(__FILE__) + '/../spec_helper'
-require File.dirname(__FILE__) + '/../../test/test_helper'
 require 'xml_controller'
 require 'dns_mock'
 
@@ -27,9 +26,6 @@ if($validator_installed == nil)
   end
 end
 
-# Re-raise errors caught by the controller.
-class XmlController; def rescue_action(e) raise e end; end
-
 describe XmlController do
   integrate_views
 
@@ -46,7 +42,10 @@ describe XmlController do
   end
 
   def assert_feedvalidator(rss, todo=nil)
-    return unless $validator_installed
+    unless $validator_installed
+      puts 'not test of validating feed because no validator (feedvalidator in python) installed'
+      return
+    end
 
     begin
       file = Tempfile.new('typo-feed-test')
@@ -96,7 +95,7 @@ describe XmlController do
   def test_feed_rss20_comments
     get :feed, :format => 'rss20', :type => 'comments'
     assert_response :moved_permanently
-    assert_moved_permanently_to formatted_admin_comments_url(:rss)
+    assert_moved_permanently_to admin_comments_url(:format=>:rss)
   end
 
   def test_feed_rss20_trackbacks
@@ -109,17 +108,17 @@ describe XmlController do
 
   def test_feed_rss20_article
     get :feed, :format => 'rss20', :type => 'article', :id => contents(:article1).id
-    assert_moved_permanently_to formatted_article_url(contents(:article1), :rss)
+    assert_moved_permanently_to contents(:article1).permalink_by_format(:rss)
   end
 
   def test_feed_rss20_category
     get :feed, :format => 'rss20', :type => 'category', :id => 'personal'
-    assert_moved_permanently_to(formatted_category_url('personal', 'rss'))
+    assert_moved_permanently_to(category_url('personal', :format => 'rss'))
   end
 
   def test_feed_rss20_tag
     get :feed, :format => 'rss20', :type => 'tag', :id => 'foo'
-    assert_moved_permanently_to(formatted_tag_url('foo', 'rss'))
+    assert_moved_permanently_to(tag_url('foo', :format=>'rss'))
   end
 
   def test_feed_atom10_feed
@@ -131,7 +130,7 @@ describe XmlController do
   def test_feed_atom10_comments
     get :feed, :format => 'atom10', :type => 'comments'
     assert_response :moved_permanently
-    assert_moved_permanently_to formatted_admin_comments_url('atom')
+    assert_moved_permanently_to admin_comments_url(:format=>'atom')
   end
 
   def test_feed_atom10_trackbacks
@@ -149,19 +148,26 @@ describe XmlController do
     assert_select 'summary'
   end
 
+  def test_feed_atom10_with_accent
+    Article.create!(:title => "News from the future!",
+                    :body => "The future is cool!",
+                    :keywords => "future",
+                    :created_at => Time.now + 12.minutes)
+  end
+
   def test_feed_atom10_article
     get :feed, :format => 'atom10', :type => 'article', :id => contents(:article1).id
-    assert_moved_permanently_to formatted_article_url(contents(:article1), 'atom')
+    assert_moved_permanently_to contents(:article1).permalink_by_format('atom')
   end
 
   def test_feed_atom10_category
     get :feed, :format => 'atom10', :type => 'category', :id => 'personal'
-    assert_moved_permanently_to(formatted_category_url('personal', 'atom'))
+    assert_moved_permanently_to(category_url('personal', :format => 'atom'))
   end
 
   def test_feed_atom10_tag
     get :feed, :format => 'atom10', :type => 'tag', :id => 'foo'
-    assert_moved_permanently_to(formatted_tag_url('foo', 'atom'))
+    assert_moved_permanently_to(tag_url('foo',:format => 'atom'))
   end
 
   def test_articlerss

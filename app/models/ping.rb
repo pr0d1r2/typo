@@ -89,13 +89,14 @@ class Ping < ActiveRecord::Base
     trackback_uri = URI.parse(trackback_url)
 
     post = "title=#{CGI.escape(article.title)}"
-    post << "&excerpt=#{CGI.escape(article.body.strip_html[0..254])}"
+    post << "&excerpt=#{CGI.escape(article.html(:body).strip_html[0..254])}"
     post << "&url=#{origin_url}"
     post << "&blog_name=#{CGI.escape(article.blog.blog_name)}"
 
-    Net::HTTP.start(trackback_uri.host, trackback_uri.port) do |http|
-      path = trackback_uri.path
-      path += "?#{trackback_uri.query}" if trackback_uri.query
+    path = trackback_uri.path
+    path += "?#{trackback_uri.query}" if trackback_uri.query
+
+    net_request = Net::HTTP.start(trackback_uri.host, trackback_uri.port) do |http|
       http.post(path, post, 'Content-type' => 'application/x-www-form-urlencoded; charset=utf-8')
     end
   end

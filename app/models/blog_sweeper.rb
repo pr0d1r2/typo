@@ -1,5 +1,5 @@
 class BlogSweeper < ActionController::Caching::Sweeper
-  observe Category, Blog, Sidebar, User, Article, Page, Categorization
+  observe Category, Blog, User, Article, Page, Categorization, Comment, Trackback
 
   def pending_sweeps
     @pending_sweeps ||= Set.new
@@ -48,9 +48,9 @@ class BlogSweeper < ActionController::Caching::Sweeper
       if record.invalidates_cache?(destroying)
         pending_sweeps << :sweep_articles << :sweep_pages
       end
-    when Sidebar, Category, Categorization
+    when Category, Categorization
       pending_sweeps << :sweep_articles << :sweep_pages
-    when Blog, User
+    when Blog, User, Comment, Trackback
       pending_sweeps << :sweep_all << :sweep_theme
     end
     unless controller
@@ -60,7 +60,6 @@ class BlogSweeper < ActionController::Caching::Sweeper
 
   def sweep_all
     PageCache.sweep_all
-    expire_fragment(/.*/)
   end
 
   def sweep_theme
@@ -68,25 +67,11 @@ class BlogSweeper < ActionController::Caching::Sweeper
   end
 
   def sweep_articles
-    expire_fragment(%r{.*/articles/.*})
-    unless Blog.default && Blog.default.cache_option == "caches_action_with_params"
-      PageCache.zap_pages(%w{index.* articles.* page
-                     pages.* feedback feedback.*
-                     comments comments.*
-                     category categories.* xml
-                     tag tags.* category archive.* *.rss *.atom  })
-
-      PageCache.zap_pages((1990..2020))
-      PageCache.zap_pages([*1990..2020].collect { |y| "#{y}.*" })
-    end
+    PageCache.sweep_all
   end
 
   def sweep_pages
-    expire_fragment(/.*\/pages\/.*/)
-    expire_fragment(/.*\/view_page.*/)
-    unless Blog.default && Blog.default.cache_option == "caches_action_with_params"
-      PageCache.zap_pages('pages')
-    end
+    PageCache.zap_pages('pages') unless Blog.default.nil?
   end
 
   def logger

@@ -25,10 +25,45 @@ describe "Given the first Blog fixture" do
   end
 end
 
+describe "The default blog" do
+  it "should pick up updates after a cache clear" do
+    a = Blog.default
+    b = blogs(:default)
+    b.blog_name = "some other name"
+    c = Blog.default
+    c.blog_name.should == "some other name"
+  end
+end
+
+
 describe "Given no blogs" do
   before(:each)  { Blog.destroy_all }
 
   it "should allow the creation of a valid default blog" do
     Blog.new.should be_valid
   end
+end
+
+describe "Valid permalink in blog" do
+
+  before :each do
+    @blog = blogs(:default)
+  end
+
+  ['foo', 'year', 'day', 'month', 'title', '%title', 'title%', '/year/month/day/title', '%title%.html.atom', '%title%.html.rss'].each do |permalink_type|
+    it "not valid with #{permalink_type}" do
+      assert_raise  ActiveRecord::RecordInvalid do
+        @blog.permalink_format = permalink_type
+      end
+    end
+  end
+
+  ['%year%', '%day%', '%month%', '%title%', '%title%.html', '/hello/all/%year%/%title%', 'atom/%title%.html', 'ok/rss/%title%.html'].each do |permalink_type|
+    it "should be valid with only #{permalink_type}" do
+      assert_nothing_raised  ActiveRecord::RecordInvalid do
+        @blog.permalink_format = permalink_type
+      end
+    end
+  end
+
 end

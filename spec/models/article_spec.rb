@@ -1,8 +1,26 @@
 require File.dirname(__FILE__) + '/../spec_helper'
 
 describe Article do
+
+
   before do
     @articles = []
+  end
+
+  describe 'Factory Girl' do
+    it 'should article factory valid' do
+      Factory(:article).should be_valid
+      Factory.build(:article).should be_valid
+    end
+    it 'should second_article factory valid' do
+      Factory(:second_article).should be_valid
+      Factory.build(:second_article).should be_valid
+
+    end
+    it 'should article_with_accent_in_html' do
+      Factory(:article_with_accent_in_html).should be_valid
+      Factory.build(:article_with_accent_in_html).should be_valid
+    end
   end
 
   def assert_results_are(*expected)
@@ -18,8 +36,7 @@ describe Article do
   end
 
   def test_permalink_url
-    a = contents(:article3)
-    assert_equal 'http://myblog.net/2004/06/01/article-3', a.permalink_url
+    assert_equal 'http://myblog.net/2004/06/01/article-3', contents(:article3).permalink_url(anchor=nil, only_path=true)
   end
 
   def test_edit_url
@@ -34,8 +51,8 @@ describe Article do
 
   def test_feed_url
     a = contents(:article3)
-    assert_equal "http://myblog.net/xml/atom10/article/#{a.id}/feed.xml", a.feed_url(:atom10)
-    assert_equal "http://myblog.net/xml/rss20/article/#{a.id}/feed.xml", a.feed_url(:rss20)
+    assert_equal "http://myblog.net/2004/06/01/article-3.atom", a.feed_url(:atom10)
+    assert_equal "http://myblog.net/2004/06/01/article-3.rss", a.feed_url(:rss20)
   end
 
   def test_create
@@ -52,17 +69,11 @@ describe Article do
     assert_equal 1, b.categories.size
   end
 
-  def test_permalink
-    assert_equal( contents(:article3), Article.find_by_date(2004,06,01) )
-    assert_equal( [contents(:article2), contents(:article1)],
-                  Article.find_all_by_date(2.days.ago.year) )
-  end
-
   def test_permalink_with_title
     assert_equal( contents(:article3),
-                  Article.find_by_permalink(2004, 06, 01, "article-3") )
+                  Article.find_by_permalink({:year => 2004, :month => 06, :day => 01, :title => "article-3"}) )
     assert_raises(ActiveRecord::RecordNotFound) do
-      Article.find_by_permalink(2005, 06, 01, "article-5")
+      Article.find_by_permalink :year => 2005, :month => "06", :day => "01", :title => "article-5"
     end
   end
 
@@ -87,6 +98,14 @@ describe Article do
     assert a.save
 
     assert_equal 'this-is-a-test', a.permalink
+  end
+
+  def test_multibyte_title
+    a = Article.new
+    a.title = "ルビー"
+    assert a.save
+
+    assert_equal '%E3%83%AB%E3%83%93%E3%83%BC', a.permalink
   end
 
   def test_urls
@@ -147,7 +166,7 @@ describe Article do
   def test_find_published_by_tag_name
     @articles = Tag.find_by_name(tags(:foo).name).published_articles
 
-    assert_results_are(:article1, :article2)
+    assert_results_are(:article1, :article2, :publisher_article)
   end
 
 
@@ -155,7 +174,7 @@ describe Article do
     @articles = Article.find_published
     assert_results_are(:search_target, :article1, :article2,
                        :article3, :inactive_article,:xmltest,
-                       :spammed_article)
+                       :spammed_article, :publisher_article, :markdown_article, :utf8_article)
 
     @articles = Article.find_published(:all,
                                                   :conditions => "title = 'Article 1!'")
@@ -201,7 +220,11 @@ describe Article do
   def assert_sets_trigger(art)
     assert_equal 1, Trigger.count
     assert Trigger.find(:first, :conditions => ['pending_item_id = ?', art.id])
-    sleep 4
+    assert !art.published
+    t = Time.now
+    # We stub the Time.now answer to emulate a sleep of 4. Avoid the sleep. So
+    # speed up in test
+    Time.stub!(:now).and_return(t + 5.seconds)
     Trigger.fire
     art.reload
     assert art.published
@@ -249,30 +272,6 @@ describe Article do
     assert contents(:article3).tags.include?(Tag.find_by_name("new"))
   end
 
-  # this also tests time_delta, indirectly
-  def test_find_all_by_date
-    feb28 = Article.new(:published => true)
-    mar1  = Article.new(:published => true)
-    mar2  = Article.new(:published => true)
-
-    feb28.title = "February 28"
-    mar1.title  = "March 1"
-    mar2.title  = "March 2"
-
-    feb28.created_at = feb28.published_at = "2004-02-28"
-    mar1.created_at  = mar1.published_at = "2004-03-01"
-    mar2.created_at  = mar2.published_at = "2004-03-02"
-
-    [feb28, mar1, mar2].each do |x|
-      x.state = :published
-      x.save
-    end
-
-    assert_equal(1, Article.find_all_by_date(2004,02).size)
-    assert_equal(2, Article.find_all_by_date(2004,03).size)
-    assert_equal(1, Article.find_all_by_date(2004,03,01).size)
-  end
-
   def test_withdrawal
     art = Article.find(contents(:article1).id)
     assert   art.published?
@@ -295,4 +294,152 @@ describe Article do
     contents(:article2).comments.count.should == 2
   end
 
+  describe '#access_by?' do
+
+    it 'admin should be access to an article write by another' do
+      contents(:article2).should be_access_by(users(:tobi))
+    end
+
+    it 'admin should be access to an article write by himself' do
+      contents(:article1).should be_access_by(users(:tobi))
+    end
+
+  end
+
+  describe 'body_and_extended' do
+    before :each do 
+      @article = contents(:article1)
+    end
+
+    it 'should combine body and extended content' do
+      @article.body_and_extended.should ==
+        "#{@article.body}\n<!--more-->\n#{@article.extended}"
+    end
+
+    it 'should not insert <!--more--> tags if extended is empty' do
+      @article.extended = ''
+      @article.body_and_extended.should == @article.body
+    end
+  end
+
+  describe '#search' do
+
+    describe 'is an array', :shared => true do
+      it 'should get an array' do
+        @articles.should be_a(Array)
+      end
+    end
+
+    describe 'with several words and no result' do
+
+      before :each do
+        @articles = Article.search('hello world')
+      end
+
+      it_should_behave_like 'is an array'
+
+      it 'should be empty' do
+        @articles.should be_empty
+      end
+    end
+
+    describe 'with one word and result' do
+
+      before :each do
+        @articles = Article.search('extended')
+      end
+
+      it_should_behave_like 'is an array'
+
+      it 'should have one item' do
+        assert_equal 9, @articles.size
+      end
+    end
+  end
+
+  describe 'body_and_extended=' do
+    before :each do 
+      @article = contents(:article1)
+    end
+
+    it 'should split apart values at <!--more-->' do
+      @article.body_and_extended = 'foo<!--more-->bar'
+      @article.body.should == 'foo'
+      @article.extended.should == 'bar'
+    end
+    
+    it 'should remove newlines around <!--more-->' do
+      @article.body_and_extended = "foo\n<!--more-->\nbar"
+      @article.body.should == 'foo'
+      @article.extended.should == 'bar'
+    end
+
+    it 'should make extended empty if no <!--more--> tag' do
+      @article.body_and_extended = "foo"
+      @article.body.should == 'foo'
+      @article.extended.should be_empty
+    end
+
+    it 'should preserve extra <!--more--> tags' do
+      @article.body_and_extended = "foo<!--more-->bar<!--more-->baz"
+      @article.body.should == 'foo'
+      @article.extended.should == 'bar<!--more-->baz'
+    end
+
+    it 'should be settable via self.attributes=' do
+      @article.attributes = { :body_and_extended => 'foo<!--more-->bar' }
+      @article.body.should == 'foo'
+      @article.extended.should == 'bar'
+    end
+  end
+
+  describe '#comment_url' do
+    it 'should render complete url of comment' do
+      contents(:article1).comment_url.should == "http://myblog.net/comments?article_id=#{contents(:article1).id}"
+    end
+  end
+
+  describe '#preview_comment_url' do
+    it 'should render complete url of comment' do
+      contents(:article1).preview_comment_url.should == "http://myblog.net/comments/preview?article_id=#{contents(:article1).id}"
+    end
+  end
+
+  def test_can_ping_fresh_article_iff_it_allows_pings
+    a = Article.find(contents(:article1).id)
+    assert_equal(false, a.pings_closed?)
+    a.allow_pings = false
+    assert_equal(true, a.pings_closed?)
+  end
+
+  def test_cannot_ping_old_article
+    a = Article.find(contents(:article3).id)
+    assert_equal(true, a.pings_closed?)
+    a.allow_pings = false
+    assert_equal(true, a.pings_closed?)
+  end
+
+  describe '#published_at_like' do
+    before do
+      @article_last_month = Factory(:article, :published_at => 1.month.ago)
+      @article_2_last_month = Factory(:article, :published_at => 1.month.ago)
+
+      @article_two_month_ago = Factory(:article, :published_at => 2.month.ago)
+      @article_2_two_month_ago = Factory(:article, :published_at => (2.month.ago - 1.day))
+      @article_two_year_ago = Factory(:article, :published_at => 2.year.ago)
+      @article_2_two_year_ago = Factory(:article, :published_at => 2.year.ago)
+    end
+
+    it 'should return all content on this year if year send' do
+      Article.published_at_like(2.year.ago.strftime('%Y')).map(&:id).sort.should == [@article_two_year_ago.id, @article_2_two_year_ago.id].sort
+    end
+
+    it 'should return all content on this month if month send' do
+      Article.published_at_like(1.month.ago.strftime('%Y-%m')).map(&:id).sort.should == [@article_last_month.id, @article_2_last_month.id].sort
+    end
+
+    it 'should return all content on this date if date send' do
+      Article.published_at_like(2.month.ago.strftime('%Y-%m-%d')).map(&:id).sort.should == [@article_two_month_ago.id].sort
+    end
+  end
 end

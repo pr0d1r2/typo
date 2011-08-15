@@ -1,11 +1,15 @@
 <% for article in @articles -%>
- <div class="post">
-  <%= render :partial => "articles/article", :object => article %>
-  <%= link_to_permalink article, _("Read more") + "..." if article.extended? %>
-  <p class="meta"><%= article_links article %></p>
+  <div class="post">
+    <%= render :partial => "articles/article", :object => article %>
+    <%= link_to_permalink article, _("Read more") + "..." if article.extended? %>
+    <p class="meta"><%= article_links article %></p>
   </div>
 <% end -%>
 
+<<<<<<< HEAD
 <% unless @pages.item_count <= this_blog.limit_article_display %>
   <p id="pagination"><%= _("Older posts")%>: <%= pagination_links @pages, :params => { :action => @controller.action_name }.merge( params[:q] ? { :q => params[:q] } : {} ) %></p>
 <% end -%>
+=======
+<p id="pagination"><%= will_paginate @articles %></p>
+>>>>>>> 31479d7b23c6cff5c7b3f9fa7d1b7239d5ba76f3

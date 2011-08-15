@@ -75,27 +75,53 @@ end
 describe "An article links to another article, which contains a trackback URL" do
   def referenced_url;  'http://anotherblog.org/a-post'; end
   def trackback_url;  "http://anotherblog.org/a-post/trackback"; end
-  def referrer_url;  'http://myblog.net/referring-post'; end
 
-  def expected_trackback_post_data
-    "title=Article+1%21&excerpt=body&url=http://myblog.net/referring-post&blog_name=test+blog"
-  end
 
   it 'Trackback URL is detected and pinged' do
+    referrer_url = 'http://myblog.net/referring-post'
+    post = "title=Article+1%21&excerpt=body&url=http://myblog.net/referring-post&blog_name=test+blog"
+    make_and_send_ping(post, contents(:article1), referrer_url)
+  end
+
+  it 'sends a trackback without html tag in excerpt' do
+    # TODO: Assert the following:
+    # contents(:xmltest).body = originally seen on <a href="http://blog.rubyonrails.org/">blog.rubyonrails.org</a>
+
+    post = "title=#{CGI.escape("Associations aren't :dependent => true anymore")}"
+    post << "&excerpt=#{CGI.escape("originally seen on blog.rubyonrails.org")}" # not original text see if normal ?
+    post << "&url=#{contents(:xmltest).permalink_url}"
+    post << "&blog_name=#{CGI.escape('test blog')}"
+
+    make_and_send_ping(post, contents(:xmltest), contents(:xmltest).permalink_url)
+  end
+
+  it 'sends a trackback without markdown tag in excerpt' do
+    # TODO: Assert the following:
+    # contents(:markdown_article) #in markdown format\n * we\n * use\n [ok](http://blog.ok.com) to define a link
+
+    post = "title=#{CGI.escape("How made link with markdown")}"
+    post << "&excerpt=#{CGI.escape("in markdown format we use ok to define a link")}" # not original text see if normal ?
+    post << "&url=#{contents(:markdown_article).permalink_url}"
+    post << "&blog_name=#{CGI.escape('test blog')}"
+
+    make_and_send_ping(post, contents(:markdown_article), contents(:markdown_article).permalink_url)
+  end
+
+  def make_and_send_ping(post, article, article_url)
     @mock = mock('html_response')
     Net::HTTP.should_receive(:get_response).with(URI.parse(referenced_url)).and_return(@mock)
     @mock.should_receive(:[]).with('X-Pingback').at_least(:once)
     @mock.should_receive(:body).twice.and_return(referenced_body)
     Net::HTTP.should_receive(:start).with(URI.parse(trackback_url).host, 80).and_yield(@mock)
+
     @mock.should_receive(:post) \
-      .with('/a-post/trackback', expected_trackback_post_data,
+      .with('/a-post/trackback', post,
             'Content-type' => 'application/x-www-form-urlencoded; charset=utf-8') \
       .and_return(@mock)
 
-    ping = contents(:article1).pings.build(:url => referenced_url)
-    ping.send_pingback_or_trackback(referrer_url)
+    ping = article.pings.build(:url => referenced_url)
+    ping.send_pingback_or_trackback(article_url)
   end
-
 
   def referenced_body
     <<-eobody

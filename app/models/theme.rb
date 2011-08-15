@@ -8,8 +8,13 @@ class Theme
     @name, @path = name, path
   end
 
-  def layout
-    "../../themes/#{name}/layouts/default.html.erb"
+  def layout(action=:default)
+    if action.to_s == 'view_page'
+      if File.exists? "#{RAILS_ROOT}/themes/#{name}/layouts/pages.html.erb"
+        return "#{RAILS_ROOT}/themes/#{name}/layouts/pages.html.erb"
+      end
+    end
+    "#{RAILS_ROOT}/themes/#{name}/layouts/default.html.erb"
   end
 
   def description

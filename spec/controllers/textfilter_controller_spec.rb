@@ -1,12 +1,6 @@
 require File.dirname(__FILE__) + '/../spec_helper'
-require File.dirname(__FILE__) + '/../../test/test_helper'
-require 'textfilter_controller'
 
 require 'flickr_mock'
-
-# Re-raise errors caught by the controller.
-class TextfilterController; def rescue_action(e) raise e end; end
-class ActionController::Base; def rescue_action(e) raise e end; end
 
 describe TextfilterController do
   before do
@@ -29,14 +23,6 @@ describe TextfilterController do
 
   def reset_whiteboard
     @whiteboard = nil
-  end
-
-  def sparklines_available
-    begin
-      Plugins::Textfilters::SparklineController
-    rescue NameError
-      false
-    end
   end
 
   def test_unknown
@@ -91,65 +77,20 @@ describe TextfilterController do
         { 'flickr-user' => 'scott@sigkill.org' })
   end
 
-  def test_sparkline
-    return unless sparklines_available
-
-    tag = filter_text('<typo:sparkline foo="bar"/>',[:macropre,:macropost])
-    # url_for returns query params in hash order, which isn't stable, so we can't just compare
-    # with a static string.  Yuck.
-    assert tag =~ %r{^<img  src="http://test.host/plugins/filters/sparkline/plot\?(data=|foo=bar|&)+"/>$}
-
-    assert_equal "<img  title=\"aaa\" src=\"http://test.host/plugins/filters/sparkline/plot?data=\"/>",
-      filter_text('<typo:sparkline title="aaa"/>',[:macropre,:macropost])
-
-    assert_equal "<img  style=\"bbb\" src=\"http://test.host/plugins/filters/sparkline/plot?data=\"/>",
-      filter_text('<typo:sparkline style="bbb"/>',[:macropre,:macropost])
-
-    tag = filter_text('<typo:sparkline alt="ccc"/>',[:macropre,:macropost])
-    assert_tag_in tag, :tag => 'img', :attributes => {
-        'alt' => 'ccc',
-        'src' => URI.parse('http://test.host/plugins/filters/sparkline/plot?data=')
-    }, :children => { :count => 0 }
-
-    tag = filter_text('<typo:sparkline type="smooth" data="1 2 3 4"/>',[:macropre,:macropost])
-    assert_tag_in tag, :tag => 'img', :attributes => {
-        'src' => URI.parse('http://test.host/plugins/filters/sparkline/plot?data=1%2C2%2C3%2C4&type=smooth')
-    }, :children => { :count => 0 }
-
-    assert_equal "<img  src=\"http://test.host/plugins/filters/sparkline/plot?data=1%2C2%2C3%2C4%2C5%2C6\"/>",
-      filter_text('<typo:sparkline>1 2 3 4 5 6</typo:sparkline>',[:macropre,:macropost])
-  end
-
-  def test_sparkline_plot
-    return unless sparklines_available
-
-    get 'public_action', :filter => 'sparkline', :public_action => 'plot', :data => '1,2,3'
-    assert_response :success
-
-    get 'public_action', :filter => 'sparkline', :public_action => 'plot2', :data => '1,2,3'
-    assert_response :missing
-
-    get 'public_action', :filter => 'sparkline', :public_action => 'plot', :data => '1,2,3', :type => 'smooth'
-    assert_response :success
-
-    get 'public_action', :filter => 'sparkline', :public_action => 'plot', :data => '1,2,3', :type => 'instance_methods'
-    assert_response :error
-  end
-
   describe 'code textfilter' do
     
     describe 'single line' do
 
       it 'should made nothin if no args' do
-        filter_text('<typo:code>foo-code</typo:code>', [:macropre,:macropost]).should == %{<div class="CodeRay"><notextile>foo-code</notextile></div>}
+        filter_text('<typo:code>foo-code</typo:code>', [:macropre,:macropost]).should == %{<div class="CodeRay"><pre><notextile>foo-code</notextile></pre></div>}
       end
 
       it 'should parse ruby lang' do
-        filter_text('<typo:code lang="ruby">foo-code</typo:code>', [:macropre,:macropost]).should == %{<div class="CodeRay"><notextile><span class=\"CodeRay\">foo-code</span></notextile></div>}
+        filter_text('<typo:code lang="ruby">foo-code</typo:code>', [:macropre,:macropost]).should == %{<div class="CodeRay"><pre><notextile><span class=\"CodeRay\">foo-code</span></notextile></pre></div>}
       end
 
       it 'should parse ruby and xml in same sentence but not in same place' do
-        filter_text('<typo:code lang="ruby">foo-code</typo:code> blah blah <typo:code lang="xml">zzz</typo:code>',[:macropre,:macropost]).should == %{<div class="CodeRay"><notextile><span class="CodeRay">foo-code</span></notextile></div> blah blah <div class="CodeRay"><notextile><span class="CodeRay">zzz</span></notextile></div>}
+        filter_text('<typo:code lang="ruby">foo-code</typo:code> blah blah <typo:code lang="xml">zzz</typo:code>',[:macropre,:macropost]).should == %{<div class="CodeRay"><pre><notextile><span class="CodeRay">foo-code</span></notextile></pre></div> blah blah <div class="CodeRay"><pre><notextile><span class="CodeRay">zzz</span></notextile></pre></div>}
       end
 
     end
@@ -166,11 +107,11 @@ class Foo
 end
 </typo:code>
 },[:macropre,:macropost]).should == %{
-<div class=\"CodeRay\"><notextile><span class=\"CodeRay\"><span class=\"r\">class</span> <span class=\"cl\">Foo</span>
+<div class=\"CodeRay\"><pre><notextile><span class=\"CodeRay\"><span class=\"r\">class</span> <span class=\"cl\">Foo</span>
   <span class=\"r\">def</span> <span class=\"fu\">bar</span>
     <span class=\"iv\">@a</span> = <span class=\"s\"><span class=\"dl\">&quot;</span><span class=\"k\">zzz</span><span class=\"dl\">&quot;</span></span>
   <span class=\"r\">end</span>
-<span class=\"r\">end</span></span></notextile></div>
+<span class=\"r\">end</span></span></notextile></pre></div>
 }
       end
     end
@@ -200,17 +141,27 @@ EOF
     expects_markdown = <<-EOF
 <p><em>header text here</em></p>
 
+<<<<<<< HEAD
 <div class="CodeRay"><span class="CodeRay"><span class="r">class</span> <span class="cl">test</span>
   <span class="r">def</span> <span class="fu">method</span>
     <span class="s"><span class="dl">&quot;</span><span class="k">foo</span><span class="dl">&quot;</span></span>
   <span class="r">end</span>
 <span class="r">end</span></span></div>
+=======
+<div class="CodeRay"><pre><span class="CodeRay"><span class="r">class</span> <span class="cl">test</span>
+  <span class="r">def</span> <span class="fu">method</span>
+    <span class="s"><span class="dl">&quot;</span><span class="k">foo</span><span class="dl">&quot;</span></span>
+  <span class="r">end</span>
+<span class="r">end</span></span></pre></div>
+
+>>>>>>> 31479d7b23c6cff5c7b3f9fa7d1b7239d5ba76f3
 
 <p><em>footer text here</em></p>
 EOF
 
     expects_textile = <<-EOF
 <p><strong>header text here</strong></p>
+<<<<<<< HEAD
 
 
 <div class="CodeRay"><span class="CodeRay"><span class="r">class</span> <span class="cl">test</span>
@@ -220,6 +171,14 @@ EOF
 <span class="r">end</span></span></div>
 
 	<p><em>footer text here</em></p>
+=======
+<div class="CodeRay"><pre><span class="CodeRay"><span class="r">class</span> <span class="cl">test</span>
+  <span class="r">def</span> <span class="fu">method</span>
+    <span class="s"><span class="dl">&quot;</span><span class="k">foo</span><span class="dl">&quot;</span></span>
+  <span class="r">end</span>
+<span class="r">end</span></span></pre></div>
+<p><em>footer text here</em></p>
+>>>>>>> 31479d7b23c6cff5c7b3f9fa7d1b7239d5ba76f3
 EOF
 
     assert_equal expects_markdown.strip, TextFilter.filter_text_by_name(blog, text, 'markdown')

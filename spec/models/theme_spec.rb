@@ -5,12 +5,12 @@ describe 'Given a new test theme' do
     @theme = Theme.new("test", "test")
   end
 
-  it 'layout path should be "../../themes/test/layouts/default.html.erb"'  do
-    @theme.layout.should == "../../themes/test/layouts/default.html.erb"
-  end
+  it 'layout path should be "#{RAILS_ROOT}/themes/test/layouts/default.html.erb"'  do
+    @theme.layout('index').should == "#{RAILS_ROOT}/themes/test/layouts/default.html.erb"
+  end  
 end
 
-describe 'Given a the default theme' do
+describe 'Given the default theme' do
   before(:each) do
     @theme = Blog.default.current_theme
   end

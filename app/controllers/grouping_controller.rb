@@ -4,12 +4,7 @@ class GroupingController < ContentController
   cache_sweeper :blog_sweeper
 
   cached_pages = [:index, :show]
-
-  if Blog.default && Blog.default.cache_option == "caches_action_with_params"
-    caches_action_with_params *cached_pages
-  else
-    caches_page *cached_pages
-  end
+  caches_page *cached_pages
 
   class << self
     def grouping_class(klass = nil)
@@ -28,20 +23,40 @@ class GroupingController < ContentController
   end
 
   def index
-    self.groupings = grouping_class.find_all_with_article_counters(1000)
+    set_noindex
+    self.groupings = grouping_class.paginate(:page => params[:page], :per_page => 100)
     @page_title = "#{self.class.to_s.sub(/Controller$/,'')}"
     @keywords = ""
-    @description = "#{_(self.class.to_s.sub(/Controller$/,'') + ' for')} #{this_blog.blog_name}"
+    @description = "#{_(self.class.to_s.sub(/Controller$/,''))} #{'for'} #{this_blog.blog_name}"
+    @description << "#{_('page')} #{params[:page]}" if params[:page]
     render_index(groupings)
   end
 
   def show
+    set_noindex
     grouping = grouping_class.find_by_permalink(params[:id])
-    @page_title = "#{self.class.to_s.sub(/Controller$/,'').singularize} #{params[:id]}, everything about #{params[:id]}"
+
+    @page_title = "#{_(self.class.to_s.sub(/Controller$/,'').singularize)} #{grouping.name}, "
+
+    if grouping.respond_to? :description and
+        not grouping.description.nil?
+      @page_title += grouping.description
+    else
+      @page_title += "#{_('everything about')} "
+
+      if grouping.respond_to? :display_name and
+          not grouping.display_name.nil?
+        @page_title += grouping.display_name
+      else
+        @page_title += grouping.name
+      end
+    end
+
     @page_title << " page " << params[:page] if params[:page]
     @description = (grouping.description.blank?) ? "" : grouping.description
     @keywords = (grouping.keywords.blank?) ? "" : grouping.keywords
-    render_articles(grouping.published_articles)
+    @articles = grouping.articles.paginate(:page => params[:page], :conditions => { :published => true}, :per_page => 10)
+    render_articles
   end
 
   protected
@@ -70,24 +85,38 @@ class GroupingController < ContentController
     end
   end
 
-  def render_articles(articles)
+  def render_articles
     respond_to do |format|
       format.html do
-        return error("Can't find any articles for '#{params[:id]}'") if articles.empty?
-
-        @pages = Paginator.new self, articles.size, this_blog.limit_article_display, params[:page]
-        @articles = articles.slice(@pages.current.offset, this_blog.limit_article_display)
+        if @articles.empty?
+          redirect_to this_blog.base_url, :status => 301
+          return
+        end
 
         render :template => 'articles/index' unless template_exists?
       end
 
-      format.atom { render_feed 'atom_feed',  articles }
-      format.rss  { render_feed 'rss20_feed', articles }
+      format.atom { render_feed 'atom_feed',  @articles }
+      format.rss  { render_feed 'rss20_feed', @articles }
     end
   end
 
   def render_feed(template, collection)
     articles = collection[0,this_blog.limit_rss_display]
     render :partial => template.sub(%r{^(?:articles/)?}, 'articles/'), :object => articles
+  end
+  
+  private
+  def set_noindex
+    # irk there must be a better way to do this
+    @noindex = 1 if (grouping_class.to_s.downcase == "tag" and this_blog.index_tags == false)
+    @noindex = 1 if (grouping_class.to_s.downcase == "category" and this_blog.index_categories == false)
+    @noindex = 1 unless params[:page].blank?
+  end
+
+  def template_exists?(path = default_template_name)
+    self.view_paths.find_template(path, response.template.template_format)
+  rescue ActionView::MissingTemplate
+    false
   end
 end

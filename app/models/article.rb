@@ -15,6 +15,11 @@ class Article < Content
       find :all, :conditions => {:state => ["presumed_ham", "ham"]}
     end
 
+    # Get only spam or presumed_spam comments
+    def spam
+      find :all, :conditions => {:state => ["presumed_spam", "spam"]}
+    end
+
   end
 
   with_options(:conditions => { :published => true }, :order => 'created_at DESC') do |this|
@@ -25,7 +30,8 @@ class Article < Content
 
   has_many :trackbacks, :dependent => :destroy, :order => "created_at ASC"
 
-  has_many :feedback,                           :order => "created_at DESC"
+  #TODO: change it because more logical with s in end : feedbacks
+  has_many :feedback, :order => "created_at DESC"
 
   has_many :resources, :order => "created_at DESC",
            :class_name => "Resource", :foreign_key => 'article_id'
@@ -35,10 +41,15 @@ class Article < Content
   has_many :categories, \
     :through => :categorizations, \
     :include => :categorizations, \
+    :select => 'categories.*', \
     :uniq => true, \
-    :order => 'categorizations.is_primary DESC, categories.position '
+    :order => 'categorizations.is_primary DESC'
 
   has_and_belongs_to_many :tags, :foreign_key => 'article_id'
+
+  named_scope :category, lambda {|category_id| {:conditions => ['categorizations.category_id = ?', category_id], :include => 'categorizations'}}
+  named_scope :drafts, :conditions => ['state = ?', 'draft']
+
 
   belongs_to :user
 
@@ -68,6 +79,19 @@ class Article < Content
     def count_published_articles
       count(:conditions => { :published => true })
     end
+
+    def search_no_draft_paginate(search_hash, paginate_hash)
+      list_function  = ["Article.no_draft"] + function_search_no_draft(search_hash)
+
+      if search_hash[:category] and search_hash[:category].to_i > 0
+        list_function << 'category(search_hash[:category])'
+      end
+
+      paginate_hash[:order] = 'created_at DESC'
+      list_function << "paginate(paginate_hash)"
+      eval(list_function.join('.'))
+    end
+
   end
 
   accents = { ['á','à','â','ä','ã','Ã','Ä','Â','À'] => 'a',
@@ -87,25 +111,43 @@ class Article < Content
   }
 
   def stripped_title
-    self.title.tr(FROM, TO).gsub(/<[^>]*>/, '').to_url
+    CGI.escape(self.title.tr(FROM, TO).gsub(/<[^>]*>/, '').to_url)
+  end
+
+  def year_url
+    published_at.year.to_s
+  end
+
+  def month_url
+    sprintf("%.2d", published_at.month)
+  end
+
+  def day_url
+    sprintf("%.2d", published_at.day)
+  end
+
+  def title_url
+    permalink.to_s
   end
 
   def permalink_url_options(nesting = false)
-    {:year                         => published_at.year,
-     :month                        => sprintf("%.2d", published_at.month),
-     :day                          => sprintf("%.2d", published_at.day),
-     :controller                   => 'articles',
-     :action                       => 'show',
-     (nesting ? :article_id : :id) => permalink}
+    format_url = blog.permalink_format.dup
+    format_url.gsub!('%year%', year_url)
+    format_url.gsub!('%month%', month_url)
+    format_url.gsub!('%day%', day_url)
+    format_url.gsub!('%title%', title_url)
+    if format_url[0,1] == '/'
+      format_url[1..-1]
+    else
+      format_url
+    end
   end
 
   def permalink_url(anchor=nil, only_path=true)
     @cached_permalink_url ||= {}
 
     @cached_permalink_url["#{anchor}#{only_path}"] ||= \
-      blog.with_options(permalink_url_options) do |b|
-        b.url_for(:anchor => anchor, :only_path => only_path)
-      end
+      blog.url_for(permalink_url_options, :anchor => anchor, :only_path => only_path)
   end
 
   def param_array
@@ -126,11 +168,32 @@ class Article < Content
   end
 
   def trackback_url
-    blog.url_for(permalink_url_options(true).merge(:controller => 'trackbacks', :action => 'index'))
+    blog.url_for("trackbacks?article_id=#{self.id}", :only_path => true)
+  end
+
+  def permalink_by_format(format=nil)
+    if format.nil?
+      permalink_url
+    elsif format.to_sym == :rss
+      feed_url(:rss)
+    elsif format.to_sym == :atom
+      feed_url(:atom)
+    else
+      raise UnSupportedFormat
+    end
+  end
+
+  def comment_url
+    blog.url_for("comments?article_id=#{self.id}", :only_path => true)
+  end
+
+  def preview_comment_url
+    blog.url_for("comments/preview?article_id=#{self.id}", :only_path => true)
   end
 
   def feed_url(format = :rss20)
-    blog.url_for(:controller => 'xml', :action => 'feed', :type => 'article', :format => format, :id => id)
+    format_extension = format.to_s.gsub(/\d/,'')
+    permalink_url + ".#{format_extension}"
   end
 
   def edit_url
@@ -155,7 +218,7 @@ class Article < Content
   def really_send_pings(serverurl = blog.base_url, articleurl = nil)
     return unless blog.send_outbound_pings
 
-    articleurl ||= permalink_url(nil, false)
+    articleurl ||= permalink_url(nil)
 
     weblogupdatesping_urls = blog.ping_urls.gsub(/ +/,'').split(/[\n\r]+/)
     pingback_or_trackback_urls = self.html_urls
@@ -201,65 +264,39 @@ class Article < Content
     end
   end
 
-  # Find all articles on a certain date
-  def self.find_all_by_date(year, month = nil, day = nil)
-    if !year.blank?
-      find_published(:all,
-                     :conditions => { :published_at =>
-                       time_delta(year,month,day) })
-    else
-      find_published(:all)
-    end
-  end
-
-  # Find one article on a certain date
-
-  def self.find_by_date(year, month, day)
-    find_all_by_date(year, month, day).first
-  end
-
   def self.find_by_published_at
     super(:published_at)
   end
 
-  def self.date_from(params_hash)
-    params_hash[:article_year] \
-      ? params_hash.values_at(:article_year, :article_month, :article_day, :article_id) \
-      : params_hash.values_at(:year, :month, :day, :id)
-  end
-
   # Finds one article which was posted on a certain date and matches the supplied dashed-title
-  def self.find_by_permalink(year, month=nil, day=nil, title=nil)
-    unless month
-      case year
-      when Hash
-        year, month, day, title = date_from(year)
-      when Array
-        year, month, day, title = year
-      end
+  # params is a Hash
+  def self.find_by_permalink(params)
+    date_range = self.time_delta(params[:year], params[:month], params[:day])
+    req_params = {}
+    if params[:title]
+      req_params[:permalink] = params[:title]
     end
-    date_range = self.time_delta(year, month, day)
-    find_published(:first,
-                   :conditions => { :permalink => title,
-                                    :published_at => date_range }) \
-      or raise ActiveRecord::RecordNotFound
+
+    if date_range
+      req_params[:published_at] = date_range
+    end
+    return nil if req_params.empty? # no search if no params send
+
+    find_published(:first, :conditions => req_params) or raise ActiveRecord::RecordNotFound
   end
 
   def self.find_by_params_hash(params = {})
-    params[:id] ||= params[:article_id]
-    if params[:id]
-      find_by_permalink(params)
-    else
-      find_by_date(*date_from(params))
-    end
+    params[:title] ||= params[:article_id]
+    find_by_permalink(params)
   end
 
   # Fulltext searches the body of published articles
-  def self.search(query)
-    if !query.to_s.strip.empty?
-      tokens = query.split.collect {|c| "%#{c.downcase}%"}
-      find_published(:all,
-                     :conditions => [(["(LOWER(body) LIKE ? OR LOWER(extended) LIKE ? OR LOWER(title) LIKE ?)"] * tokens.size).join(" AND "), *tokens.collect { |token| [token] * 3 }.flatten])
+  def self.search(query, args={})
+    query_s = query.to_s.strip
+    if !query_s.empty? && args.empty?
+      Article.searchstring(query)
+    elsif !query_s.empty? && !args.empty?
+      Article.searchstring(query).paginate(args)
     else
       []
     end
@@ -290,6 +327,11 @@ class Article < Content
     !(allow_comments? && in_feedback_window?)
   end
 
+  def pings_closed?
+    !(allow_pings? && in_feedback_window?)
+  end
+
+  # check if time to comment is open or not
   def in_feedback_window?
     self.blog.sp_article_auto_close.zero? ||
       self.created_at.to_i > self.blog.sp_article_auto_close.days.ago.to_i
@@ -330,22 +372,12 @@ class Article < Content
     self[:body]
   end
 
-  def body_html
-    typo_deprecated "Use html(:body)"
-    html(:body)
-  end
-
   def extended=(newval)
     if self[:extended] != newval
       changed if published?
       self[:extended] = newval
     end
     self[:extended]
-  end
-
-  def extended_html
-    typo_deprecated "Use html(:extended)"
-    html(:extended)
   end
 
   def self.html_map(field=nil)
@@ -359,6 +391,25 @@ class Article < Content
 
   def content_fields
     [:body, :extended]
+  end
+
+  # The web interface no longer distinguishes between separate "body" and
+  # "extended" fields, and instead edits everything in a single edit field,
+  # separating the extended content using "<!--more-->".
+  def body_and_extended
+    if extended.nil? || extended.empty?
+      body
+    else
+      body + "\n<!--more-->\n" + extended
+    end
+  end
+
+  # Split apart value around a "<!--more-->" comment and assign it to our
+  # #body and #extended fields.
+  def body_and_extended= value
+    parts = value.split(/\n?<!--more-->\n?/, 2)
+    self.body = parts[0]
+    self.extended = parts[1] || ''
   end
 
   ## Feed Stuff
@@ -423,12 +474,25 @@ class Article < Content
   end
 
   def atom_content(xml)
+    if self.user && self.user.name
+      rss_desc = "<hr /><p><small>#{_('Original article writen by')} #{self.user.name} #{_('and published on')} <a href='#{blog.base_url}'>#{blog.blog_name}</a> | <a href='#{self.permalink_url}'>#{_('direct link to this article')}</a> | #{_('If you are reading this article elsewhere than')} <a href='#{blog.base_url}'>#{blog.blog_name}</a>, #{_('it has been illegally reproduced and without proper authorization')}.</small></p>"
+    else
+      rss_desc = ""
+    end
+    
+    # This HTMLEntities is use to convert bad entities on dabase. We can check 
+    # some bad data insert by FCKEditor. We can found to &eacute; by exemple.
+    # If we doesn't change that, the atom feed is invalid
+    coder = HTMLEntities.new
+    post = coder.decode(html(blog.show_extended_on_rss ? :all : :body))
+    content = blog.rss_description ? post + rss_desc : post
+
     xml.summary "type" => "xhtml" do
-      xml.div(:xmlns => "http://www.w3.org/1999/xhtml") {xml << html(:body) }
+      xml.div(:xmlns => "http://www.w3.org/1999/xhtml") {xml << coder.decode(html(:body)) }
     end
     if blog.show_extended_on_rss
       xml.content(:type => "xhtml") do
-        xml.div(:xmlns => 'http://www.w3.org/1999/xhtml') { xml << html(:all) }
+        xml.div(:xmlns => 'http://www.w3.org/1999/xhtml') { xml << content }
       end
     end
   end
@@ -439,6 +503,10 @@ class Article < Content
 
   def add_category(category, is_primary = false)
     self.categorizations.build(:category => category, :is_primary => is_primary)
+  end
+
+  def access_by?(user) 
+    user.admin? || user_id == user.id 
   end
 
   protected
@@ -479,7 +547,8 @@ class Article < Content
     self.notify_users.uniq!
   end
 
-  def self.time_delta(year, month = nil, day = nil)
+  def self.time_delta(year = nil, month = nil, day = nil)
+    return nil if year.nil? && month.nil? && day.nil?
     from = Time.mktime(year, month || 1, day || 1)
 
     to = from.next_year

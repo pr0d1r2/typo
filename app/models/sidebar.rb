@@ -49,7 +49,7 @@ class Sidebar < ActiveRecord::Base
     class TextAreaField < self
       def input_html(sidebar)
         html_options = { "rows" => "10", "cols" => "30", "style" => "width:255px"}.update(options.stringify_keys)
-        text_area_tag(input_name(sidebar), h(sidebar.config[key]), html_options)
+        text_area_tag(input_name(sidebar), sidebar.config[key], html_options)
       end
     end
 
@@ -74,8 +74,8 @@ class Sidebar < ActiveRecord::Base
 
     class CheckBoxField < self
       def input_html(sidebar)
-        check_box_tag(input_name(sidebar), 1, sidebar.config[key], options)+
-        hidden_field_tag(input_name(sidebar),0)
+        hidden_field_tag(input_name(sidebar),0)+
+        check_box_tag(input_name(sidebar), 1, sidebar.config[key], options)
       end
 
       def line_html(sidebar)

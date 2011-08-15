@@ -1,9 +1,4 @@
-require File.dirname(__FILE__) + '/../../../test/test_helper'
 require File.dirname(__FILE__) + '/../../spec_helper'
-require 'admin/users_controller'
-
-# Re-raise errors caught by the controller.
-class Admin::UsersController; def rescue_action(e) raise e end; end
 
 describe Admin::UsersController, "rough port of the old functional test" do
   integrate_views
@@ -29,34 +24,51 @@ describe Admin::UsersController, "rough port of the old functional test" do
       response.should redirect_to(:action => 'index')
     end
 
-    def test_edit
-      user_id = users(:tobi).id
-      get :edit, :id => user_id
-      assert_template 'edit'
-      assert_valid assigns(:user)
+    describe '#EDIT action' do
+      describe 'with POST request' do
+        before do
+          post :edit, :id => users(:tobi).id, :user => { :login => 'errand',
+            :email => 'corey@test.com', :password => 'testpass',
+            :password_confirmation => 'testpass' }
+        end
+        it 'should redirect to index' do
+          response.should redirect_to(:action => 'index')
+        end
+      end
 
-      post :edit, :id => user_id, :user => { :login => 'errand',
-        :email => 'corey@test.com', :password => 'testpass',
-        :password_confirmation => 'testpass' }
-      response.should redirect_to(:action => 'index')
-    end
+      describe 'with GET request' do
+        describe 'edit admin render', :shared => true do
+          it 'should render template edit' do
+            assert_template 'edit'
+          end
 
-    it 'should edit himself if no params[:id]' do
-      get :edit
-      assert_template 'edit'
-      assert_valid assigns(:user)
+          it 'should assigns tobi user' do
+            assert assigns(:user).valid?
+            assigns(:user).should == users(:tobi)
+          end
+        end
+        describe 'with no id params' do
+          before do
+            get :edit
+          end
+          it_should_behave_like 'edit admin render'
+        end
 
-      post :edit, :user => { :login => 'errand',
-        :email => 'corey@test.com', :password => 'testpass',
-        :password_confirmation => 'testpass' }
-      response.should redirect_to(:action => 'index')
+        describe 'with id params' do
+          before do
+            get :edit, :id => users(:tobi).id
+          end
+          it_should_behave_like 'edit admin render'
+        end
+
+      end
     end
 
     def test_destroy
       user_count = User.count
       get :destroy, :id => users(:bob).id
       assert_template 'destroy'
-      assert_valid assigns(:user)
+      assert assigns(:user).valid?
 
       assert_equal user_count, User.count
       post :destroy, :id => users(:bob).id
@@ -73,19 +85,25 @@ describe Admin::UsersController, "rough port of the old functional test" do
 
     it "don't see the list of user" do
       get :index
-      response.should redirect_to(:action => 'edit')
+      response.should redirect_to('/accounts/login')
     end
 
-    it 'become a Typo admin' do
-      post :edit, :id => users(:user_publisher).id, :profile_id => profiles(:admin).id
-      response.should redirect_to(:action => 'index')
-    end
-    
-    it 'try update another user' do
-      post :edit, :id => users(:tobi).id, :profile_id => profiles(:contributor).id
-      response.should redirect_to(:action => 'index')
-      u = users(:tobi).reload
-      u.profile_id.should == profiles(:admin).id
+    describe 'EDIT Action' do
+
+      describe 'try update another user' do
+        before do
+          post :edit,
+            :id => users(:tobi).id,
+            :profile_id => profiles(:contributor).id
+        end
+        it 'should redirect to login' do
+          response.should redirect_to('/accounts/login')
+        end
+        it 'should not change user profile' do
+          u = users(:tobi).reload
+          u.profile_id.should == profiles(:admin).id
+        end
+      end
     end
   end
 end

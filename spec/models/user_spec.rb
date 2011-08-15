@@ -13,14 +13,18 @@ describe 'With the contents and users fixtures loaded' do
     User.authenticate('bob', 'wrong password').should be_nil
   end
 
+  it 'User.authenticate(inactive,valid) returns nil' do
+    User.authenticate('inactive', 'longtest').should be_nil
+  end
+
   it 'User.authenticate(invalid,whatever) returns nil' do
     User.authenticate('userwhodoesnotexist', 'what ever').should be_nil
   end
 
   it 'The various article finders work appropriately' do
-    users(:tobi).articles.size.should == 7
+    users(:tobi).articles.size.should == 8
 #    User.find(1).articles.find_published.size.should == Article.find(:all, :conditions => {:published => true}).size
-    users(:tobi).articles.published.size.should == 6
+    users(:tobi).articles.published.size.should == 7
   end
 
   it 'authenticate? works as expected' do
@@ -34,24 +38,6 @@ describe 'With a new user' do
     @user = User.new :login => 'not_bob'
     @user.email = 'typo@typo.com'
     set_password 'a secure password'
-  end
-
-  it 'password cannot be too short' do
-    set_password 'tiny'
-    @user.should_not be_valid
-    @user.errors.should be_invalid('password')
-  end
-
-  it 'password cannot be too long' do
-    set_password 'x' * 80
-    @user.should_not be_valid
-    @user.errors.should be_invalid('password')
-  end
-
-  it 'password cannot be blank' do
-    set_password ''
-    @user.should_not be_valid
-    @user.errors.should be_invalid('password')
   end
 
   it 'password can be just right' do
@@ -106,5 +92,19 @@ describe 'With a user, "bob" in the database' do
 
     u.should_not be_valid
     u.errors.should be_invalid('login')
+  end
+end
+
+describe User do
+  describe '#admin?' do
+
+    it 'should return true if user is admin' do
+      users(:tobi).should be_admin
+    end
+
+    it 'should return false if user is not admin' do
+      users(:user_publisher).should_not be_admin
+    end
+
   end
 end

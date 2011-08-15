@@ -1,23 +1,25 @@
-require File.dirname(__FILE__) + '/../../test/test_helper'
 require File.dirname(__FILE__) + '/../spec_helper'
-require 'spec'
 require 'action_web_service/test_invoke'
 require 'backend_controller'
 require 'blogger_service'
 require 'meta_weblog_service'
+require 'app/apis/movable_type_service.rb'
 require 'digest/sha1'
 require 'base64'
 
-# Re-raise errors caught by the controller.
-class BackendController; def rescue_action(e) raise e end; end
+User.salt = 'change-me'
 
 BackendController.class_eval do
   include ActionWebService::Protocol::XmlRpc
 end
+<<<<<<< HEAD
 
 describe BackendController do
   include FlexMock::TestCase
+=======
+>>>>>>> 31479d7b23c6cff5c7b3f9fa7d1b7239d5ba76f3
 
+describe BackendController do
   before do
     @protocol = :xmlrpc
   end
@@ -34,7 +36,7 @@ describe BackendController do
     args = [ 'foo', 'tobi', 'whatever' ]
 
     result = invoke_layered :blogger, :getUsersBlogs, *args
-    assert_equal result.first['blogName'], 'test blog'
+    assert_equal 'test blog', result.first['blogName']
   end
 
   def test_blogger_get_user_info
@@ -146,7 +148,7 @@ describe BackendController do
     assert_equal article.title, new_article.title
     assert_equal article.body, new_article.body
     assert_equal "<p>this is a <strong>test</strong></p>", new_article.html(:body)
-    assert_equal Time.now.midnight.utc, new_article.published_at.utc
+    assert_equal article.published_at, new_article.published_at.utc
   end
 
   # TODO: Work out what the correct response is when a post can't be saved...
@@ -183,7 +185,7 @@ describe BackendController do
     assert_equal "<p>body</p>", new_post.html(:body)
     assert_equal article.extended, new_post.extended
     assert_equal "<p>extend me</p>", new_post.html(:extended)
-    assert_equal Time.now.midnight.utc, new_post.published_at.utc
+    assert_equal article.published_at, new_post.published_at.utc
   end
 
   def test_meta_weblog_new_unpublished_post_with_blank_creation_date
@@ -234,6 +236,25 @@ describe BackendController do
     args = [ 1, 'tobi', 'using a wrong password', 2 ]
     # This will be a little more useful with the upstream changes in [1093]
     assert_raise(XMLRPC::FaultException) { invoke_layered :metaWeblog, :getRecentPosts, *args }
+  end
+
+  def test_meta_weblog_should_preserve_date_time_on_roundtrip_edit
+    # The XML-RPC spec and the MetaWeblog API are ambiguous about how to
+    # intrepret the timezone in the dateCreated field.  But _however_ we
+    # interpret it, we want to be able to fetch an article from the server,
+    # edit it, and write it back to the server without changing its
+    # dateCreated field.
+    article = contents(:article1)
+    original_published_at = article.published_at
+
+    args = [ article.id, 'tobi', 'whatever' ]
+    result = invoke_layered :metaWeblog, :getPost, *args
+    assert_equal original_published_at, result['dateCreated'].to_time
+
+    args = [ article.id, 'tobi', 'whatever', result, 1 ]
+    result = invoke_layered :metaWeblog, :editPost, *args
+    article.reload
+    assert_equal original_published_at, article.published_at
   end
 
   # Movable Type Tests

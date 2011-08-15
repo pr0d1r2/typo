@@ -3,7 +3,7 @@
 article1:
   title: Article 1!
   body: body
-  extended: extended content
+  extended: "extended content"
   created_at: <%= (Time.now - 2.days).to_s(:db) %>
   updated_at: <%= (Time.now - 2.days).to_s(:db) %>
   published_at: <%= (Time.now - 2.days).to_s(:db) %>
@@ -17,6 +17,7 @@ article1:
   published: true
   state: published
   tags: foo, bar
+  text_filter: markdown_filter
 
 article2:
   type: Article
@@ -159,6 +160,24 @@ xmltest:
   published: true
   state: published
 
+markdown_article:
+  type: Article
+  title: How made link with markdown
+  body: "in markdown format\n\n * we\n * use\n [ok](http://blog.ok.com) to define a link"
+  extended: extended content
+  allow_comments: true
+  allow_pings: true
+  permalink: associations-arent-dependent-true-anymore
+  created_at: 2003-04-28 05:31:00
+  updated_at: 2003-04-28 05:31:00
+  published_at: 2003-04-28 05:31:00
+  user: tobi
+  author: Tobi
+  guid: urn:uuid:0d676c66-4135-4a8b-9d65-b6a3248d3033
+  published: true
+  state: published
+  text_filter: markdown_filter
+
 spammed_article:
   type: Article
   title: C'mon Spam Me!
@@ -175,3 +194,38 @@ spammed_article:
   published: true
   state: published
 
+publisher_article:
+  title: Article write by publisher
+  body: body
+  extended: extended content
+  created_at: 2004-06-02 20:00:03
+  updated_at: 2004-06-02 20:00:03
+  published_at: 2004-06-02 20:00:03
+  allow_comments: true
+  allow_pings: true
+  permalink: article-write-by-publisher
+  user: user_publisher
+  author: user_publisher
+  guid: a87c4220-18d4-11db-aadd-1002a5d5c51c
+  type: Article
+  published: true
+  state: published
+  tags: foo, bar
+
+utf8_article:
+  title: ルビー
+  body: body
+  extended: extended content
+  created_at: 2004-06-02 20:00:03
+  updated_at: 2004-06-02 20:00:03
+  published_at: 2004-06-02 20:00:03
+  allow_comments: true
+  allow_pings: true
+  permalink: ルビー
+  user: user_publisher
+  author: user_publisher
+  guid: a87c4220-18d4-11db-aadd-1002a5d5c51d
+  type: Article
+  published: true
+  state: published
+  tags: foo2, bar2

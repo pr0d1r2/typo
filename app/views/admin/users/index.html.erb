@@ -1,5 +1,5 @@
 <% @page_heading = _('Users') + ' <span> &raquo; '+ link_to(_('add new'), :action=>'new') +'</span>' %>
-<% subtabs_for(:users) %>
+<% subtabs_for(:settings) %>
 
 <div class="list">
   <table>
@@ -10,15 +10,20 @@
       <th><%= _("Profile") %></th>
       <th><%= _("Articles") %></th>
       <th><%= _("Comments") %></th>
+      <th><%= _("State") %></th>
+    </tr>
+    <tr class="menubar">
+      <td colspan="7">&nbsp;</td>
     </tr>
     <% for user in @users -%>
     <tr <%= alternate_class %>>
-      <td class="field"><%= link_to_edit user.login, user%></td>
-      <td class="field"> <%= user.name %></td>
-      <td class="field"><%= mail_to user.email, user.login%></td>
-      <td class="field"><%= _(user.profile.nicename) %></td>
-      <td class="field"><%= Article.count :conditions => "user_id = #{user.id}"  %></td>
-      <td class="field"><%= Comment.count :conditions => "user_id = #{user.id}"  %></td>
+      <td><%= link_to_edit user.login, user%></td>
+      <td> <%= user.name %></td>
+      <td><%= mail_to user.email, user.login%></td>
+      <td><%= _(user.profile.nicename) %></td>
+      <td><%= Article.count :conditions => "user_id = #{user.id}"  %></td>
+      <td><%= Comment.count :conditions => "user_id = #{user.id}"  %></td>
+      <td class='<%= user.state %>'><%= _("#{user.state}")%></td>
     </tr>  
     <% end -%>
     <tr><td colspan="8" class="paginate"><%= will_paginate @users %></td></tr>

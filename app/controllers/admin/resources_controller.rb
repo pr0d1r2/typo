@@ -1,12 +1,19 @@
 class Admin::ResourcesController < Admin::BaseController
   upload_status_for :file_upload, :status => :upload_status
 
+  cache_sweeper :blog_sweeper
+  
   def upload
     begin
       case request.method
         when :post
           file = params[:upload][:filename]
-          @up = Resource.create(:filename => file.original_filename, :mime => file.content_type.chomp, :created_at => Time.now)
+          unless file.content_type
+            mime = 'text/plain'
+          else
+            mime = file.content_type.chomp
+          end
+          @up = Resource.create(:filename => file.original_filename, :mime => mime, :created_at => Time.now)
 
           @up.write_to_disk(file)
 
@@ -71,7 +78,7 @@ class Admin::ResourcesController < Admin::BaseController
   def index
     @r = Resource.new
     @itunes_category_list = @r.get_itunes_categories
-    @resources = Resource.paginate :page => params[:page], :conditions => @conditions, :order => 'created_at DESC', :per_page => 10
+    @resources = Resource.paginate :page => params[:page], :conditions => @conditions, :order => 'created_at DESC', :per_page => this_blog.admin_display_elements
   end
 
   def destroy

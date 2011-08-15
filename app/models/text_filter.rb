@@ -1,6 +1,6 @@
 require 'net/http'
 
-class TextFilter < CachedModel
+class TextFilter < ActiveRecord::Base
   serialize :filters
   serialize :params
 
@@ -68,11 +68,6 @@ class TextFilter < CachedModel
   def filter_text_for_content(blog, text, content)
     self.class.filter_text(blog, text, content,
       [:macropre, markup, :macropost, filters].flatten, params)
-  end
-
-  def filter(text)
-    typo_deprecated "What does this do?"
-    self.class.filter(text,self.filters,self.params)
   end
 
   def help

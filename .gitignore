@@ -1,3 +1,12 @@
 config/database.yml
 config/mail.yml
 *.log
+*~
+db/*.sqlite*
+db/schema.rb
+.*.swp
+.DS_Store
+installer/rails_installer.yml
+tmp/*
+spec/public
+doc/api

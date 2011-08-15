@@ -1,15 +1,28 @@
 class Admin::SettingsController < Admin::BaseController
 
+  cache_sweeper :blog_sweeper
+
   def index
     if this_blog.base_url.blank?
       this_blog.base_url = blog_base_url
     end
+    load_settings
   end
   
-  def read; end
-  def write; end
-  def feedback; end
-  def seo; end
+  def read; load_settings end
+  def write; load_settings end
+  def feedback; load_settings end
+  
+  def seo
+    load_settings
+    if File.exists? "#{RAILS_ROOT}/public/robots.txt"
+      @setting.robots = ""
+      file = File.readlines("#{RAILS_ROOT}/public/robots.txt")
+      file.each do |line|
+        @setting.robots << line
+      end
+    end
+  end
   
   def redirect
     flash[:notice] = _("Please review and save the settings before continuing")
@@ -23,8 +36,13 @@ class Admin::SettingsController < Admin::BaseController
         this_blog.save
         flash[:notice] = _('config updated.')
       end
+      
+      save_robots unless params[:setting][:robots].blank?
+      
       redirect_to :action => params[:from]
     end
+  rescue ActiveRecord::RecordInvalid
+    render :action => params[:from]
   end
   
   def update_database
@@ -43,4 +61,16 @@ class Admin::SettingsController < Admin::BaseController
     end
   end
   
+  private
+  def load_settings
+    @setting = this_blog
+  end
+  
+  def save_robots
+    if File.writable? "#{RAILS_ROOT}/public/robots.txt"
+      robots = File.new("#{RAILS_ROOT}/public/robots.txt", "r+")
+      robots.write(params[:setting][:robots])
+      robots.close
+    end
+  end
 end

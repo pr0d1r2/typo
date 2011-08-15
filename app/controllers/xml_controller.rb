@@ -1,6 +1,5 @@
 class XmlController < ApplicationController
   caches_page :feed
-  session :off
 
   NORMALIZED_FORMAT_FOR = {'atom' => 'atom', 'rss' => 'rss',
     'atom10' => 'atom', 'atom03' => 'atom', 'rss20' => 'rss',
@@ -23,17 +22,20 @@ class XmlController < ApplicationController
     when 'feed'
       redirect_to :controller => 'articles', :action => 'index', :format => @format, :status => 301
     when 'comments'
-      head :moved_permanently, :location => formatted_admin_comments_url(@format)
+      head :moved_permanently, :location => admin_comments_url(:format => @format)
     when 'article'
-      head :moved_permanently, :location => formatted_article_url(Article.find(params[:id]), @format)
+      head :moved_permanently, :location => Article.find(params[:id]).permalink_by_format(@format)
     when 'category', 'tag', 'author'
       head :moved_permanently, \
-        :location => self.send("formatted_#{params[:type]}_url", params[:id], @format)
+        :location => self.send("#{params[:type]}_url", params[:id], :format => @format)
     else
       @items = Array.new
       @blog = this_blog
-      @feed_title = this_blog.blog_name
+      # We use @feed_title.<< to destructively modify @feed_title, below, so
+      # make sure we have our own copy to modify.
+      @feed_title = this_blog.blog_name.dup
       @link = this_blog.base_url
+      @self_url = url_for(params)
 
       if respond_to?("prep_#{params[:type]}")
         self.send("prep_#{params[:type]}")
@@ -41,6 +43,7 @@ class XmlController < ApplicationController
         render :text => 'Unsupported action', :status => 404
         return
       end
+
       respond_to do |format|
         format.googlesitemap
         format.atom
@@ -131,7 +134,7 @@ class XmlController < ApplicationController
   def prep_sitemap
     fetch_items(:articles, 'created_at DESC', 1000)
     fetch_items(:pages, 'created_at DESC', 1000)
-    @items += Category.find_all_with_article_counters(1000)
-    @items += Tag.find_all_with_article_counters(1000)
+    @items += Category.find_all_with_article_counters(1000) unless this_blog.index_categories == false
+    @items += Tag.find_all_with_article_counters(1000) unless this_blog.index_tags == false
   end
 end

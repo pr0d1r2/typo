@@ -1,9 +1,4 @@
-require File.dirname(__FILE__) + '/../../../test/test_helper'
 require File.dirname(__FILE__) + '/../../spec_helper'
-require 'admin/blacklist_controller'
-
-# Re-raise errors caught by the controller.
-class Admin::BlacklistController; def rescue_action(e) raise e end; end
 
 describe Admin::BlacklistController do
   before do
@@ -34,7 +29,7 @@ describe Admin::BlacklistController do
     get :edit, 'id' => blacklist_patterns(:first_blacklist_pattern).id
     assert_template 'edit'
     assert_template_has('blacklist_pattern')
-    assert_valid assigns(:blacklist_pattern)
+    assert assigns(:blacklist_pattern).valid?
   end
 
   def test_update

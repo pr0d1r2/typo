@@ -1,9 +1,9 @@
 <%= error_messages_for 'blacklist_pattern' %>
 
-<ul class="admin set">
+<ul class="admin">
   <li>
     <label for="blacklist_pattern_pattern" class="block"><%= _("Pattern")%></label> 
-    <%= text_field 'blacklist_pattern', 'pattern'  %>    
+    <%= text_field :blacklist_pattern, :pattern  %>    
   </li>
   <li>  
     <label for="blacklist_pattern_type" class="block"><%= _("Type")%></label>

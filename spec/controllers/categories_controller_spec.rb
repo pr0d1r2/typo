@@ -1,18 +1,6 @@
 require File.dirname(__FILE__) + '/../spec_helper'
 
 describe CategoriesController, "/index" do
-  before(:each) do
-    Category.stub!(:find_all_with_article_counters) \
-      .and_return(mock('categories', :null_object => true))
-
-    controller.stub!(:template_exists?) \
-      .and_return(true)
-
-    this_blog = Blog.default
-    controller.stub!(:this_blog) \
-      .and_return(this_blog)
-  end
-
   def do_get
     get 'index'
   end
@@ -22,7 +10,10 @@ describe CategoriesController, "/index" do
     response.should be_success
   end
 
-  it "should render :index" do
+  it "should render :index"
+  if false
+    controller.stub!(:template_exists?) \
+      .and_return(true)
     do_get
     response.should render_template(:index)
   end
@@ -36,27 +27,9 @@ describe CategoriesController, "/index" do
   end
 end
 
-describe CategoriesController, '/articles/category/foo' do
-  before(:each) do
-    @category = mock('category', :null_object => true)
-    @category.stub!(:empty?) \
-      .and_return(false)
-
-    Category.stub!(:find_by_permalink) \
-      .and_return(@category)
-
-    ActionController::Pagination::Paginator.stub!(:new) \
-      .and_return(mock('pages', :null_object => true))
-
-    controller.stub!(:template_exists?) \
-      .and_return(true)
-    this_blog = Blog.default
-    controller.stub!(:this_blog) \
-      .and_return(this_blog)
-  end
-
+describe CategoriesController, '/articles/category/personal' do
   def do_get
-    get 'show', :id => 'foo'
+    get 'show', :id => 'personal'
   end
 
   it 'should be successful' do
@@ -64,14 +37,18 @@ describe CategoriesController, '/articles/category/foo' do
     response.should be_success
   end
 
-  it 'should call Category.find_by_permalink' do
+  it 'should raise ActiveRecord::RecordNotFound' do
     Category.should_receive(:find_by_permalink) \
-      .with('foo') \
-      .and_return(mock('category', :null_object => true))
-    do_get
+      .with('personal').and_raise(ActiveRecord::RecordNotFound)
+    lambda do
+      do_get
+    end.should raise_error(ActiveRecord::RecordNotFound)
   end
 
-  it 'should render :show by default' do
+  it 'should render :show by default'
+  if false
+    controller.stub!(:template_exists?) \
+      .and_return(true)
     do_get
     response.should render_template(:show)
   end
@@ -79,34 +56,46 @@ describe CategoriesController, '/articles/category/foo' do
   it 'should fall back to rendering articles/index' do
     controller.should_receive(:template_exists?) \
       .with() \
-      .and_return(false)
-    do_get
-    response.should render_template('articles/index')
+      .and_raise(ActiveRecord::RecordNotFound)
+    lambda do
+      do_get
+    end.should raise_error(ActiveRecord::RecordNotFound)
   end
 
-  it 'should set the page title to "Category foo"' do
-    do_get
-    assigns[:page_title].should == 'Category foo, everything about foo'
+  it 'should show only published articles' do
+    c = categories(:personal)
+    c.articles.size.should == 4
+    c.published_articles.size.should == 3
+
+    get 'show', :id => 'personal'
+
+    response.should be_success
+    assigns[:articles].size.should == 3
   end
 
-  it 'should render an error when the category is empty' do
-    @category.should_receive(:published_articles) \
-      .and_return([])
-
+  it 'should set the page title to "Category Personal"' do
     do_get
-
-    response.should render_template('articles/error')
-    assigns[:message].should == "Can't find any articles for 'foo'"
+    assigns[:page_title].should == 'Category Personal, everything about Personal'
   end
 
-  it 'should render the atom feed for /articles/category/foo.atom' do
-    get 'show', :id => 'foo', :format => 'atom'
+  it 'should render the atom feed for /articles/category/personal.atom' do
+    get 'show', :id => 'personal', :format => 'atom'
     response.should render_template('articles/_atom_feed')
   end
 
-  it 'should render the rss feed for /articles/category/foo.rss' do
-    get 'show', :id => 'foo', :format => 'rss'
+  it 'should render the rss feed for /articles/category/personal.rss' do
+    get 'show', :id => 'personal', :format => 'rss'
     response.should render_template('articles/_rss20_feed')
+  end
+
+end
+
+describe CategoriesController, 'empty category life-on-mars' do
+  it 'should redirect to home when the category is empty' do
+    get 'show', :id => 'life-on-mars'
+
+    response.status.should == "301 Moved Permanently"
+    response.should redirect_to(Blog.default.base_url)
   end
 end
 

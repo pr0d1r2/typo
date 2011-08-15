@@ -15,8 +15,9 @@ end
 #
 # Typo decides which Blog object to use by searching for a Blog base_url that
 # matches the base_url computed for each request.
-class Blog < CachedModel
+class Blog < ActiveRecord::Base
   include ConfigManager
+  extend ActiveSupport::Memoizable
 
   validate_on_create { |blog|
     unless Blog.count.zero?
@@ -67,17 +68,26 @@ class Blog < CachedModel
   setting :ping_urls,                  :string, "http://blogsearch.google.com/ping/RPC2\nhttp://rpc.technorati.com/rpc/ping\nhttp://ping.blo.gs/\nhttp://rpc.weblogs.com/RPC2"
   setting :send_outbound_pings,        :boolean, true
   setting :email_from,                 :string, 'typo@example.com'
-  setting :editor,                     :integer, 2
+  setting :editor,                     :integer, 'visual'
   setting :cache_option,               :string, 'caches_page'
   setting :allow_signup,               :integer, 0
 
   # SEO
   setting :meta_description,           :string, ''
   setting :meta_keywords,              :string, ''
-  setting :google_analytics,            :string, ''
-  
+  setting :google_analytics,           :string, ''
+  setting :feedburner_url,             :string, ''
+  setting :rss_description,            :boolean, false
+  setting :permalink_format,           :string, '/%year%/%month%/%day%/%title%'
+  setting :robots,                     :string, ''
+  setting :index_categories,           :boolean, true
+  setting :index_tags,                 :boolean, true
+  setting :admin_display_elements,     :integer, 10
   #deprecation warning for plugins removal
   setting :deprecation_warning,        :integer, 1
+
+
+  validate :permalink_has_identifier
 
   def initialize(*args)
     super
@@ -99,14 +109,18 @@ class Blog < CachedModel
   # The default Blog.  This is the lowest-numbered blog, almost always id==1.
   def self.default
     find(:first, :order => 'id')
+  rescue
+    logger.warn 'You have no blog installed.'
+    nil
   end
 
+  # In settings with :article_id
   def ping_article!(settings)
     unless global_pings_enabled? && settings.has_key?(:url) && settings.has_key?(:article_id)
       throw :error, "Invalid trackback or trackbacks not enabled"
     end
     settings[:blog_id] = self.id
-    article = requested_article(settings)
+    article = Article.find(settings[:article_id])
     unless article.allow_pings?
       throw :error, "Trackback not saved"
     end
@@ -124,8 +138,9 @@ class Blog < CachedModel
 
   # The +Theme+ object for the current theme.
   def current_theme
-    @cached_theme ||= Theme.find(theme)
+    Theme.find(theme)
   end
+  memoize :current_theme
 
   # Generate a URL based on the +base_url+.  This allows us to generate URLs
   # without needing a controller handy, so we can produce URLs from within models
@@ -133,9 +148,14 @@ class Blog < CachedModel
   #
   # It also uses our new RouteCache, so repeated URL generation requests should be
   # fast, as they bypass all of Rails' route logic.
-  def url_for(options = {}, *extra_params)
+  def url_for(options = {}, extra_params = {})
     case options
-    when String then options # They asked for 'url_for "/some/path"', so return it unedited.
+    when String
+      url_generated = ''
+      url_generated = self.base_url if extra_params[:only_path]
+      url_generated += "/#{options}" # They asked for 'url_for "/some/path"', so return it unedited.
+      url_generated += "##{extra_params[:anchor]}" if extra_params[:anchor]
+      url_generated
     when Hash
       unless RouteCache[options]
         options.reverse_merge!(:only_path => true, :controller => '',
@@ -165,49 +185,12 @@ class Blog < CachedModel
     "#{base_url}/files/#{filename}"
   end
 
-  # The base server URL.
-  def server_url
-    base_url
-  end
-
-  # Deprecated
-  typo_deprecate :canonical_server_url => :base_url
-
-  def [](key)  # :nodoc:
-    typo_deprecated "Use blog.#{key}"
-    self.send(key)
-  end
-
-  def []=(key, value)  # :nodoc:
-    typo_deprecated "Use blog.#{key}="
-    self.send("#{key}=", value)
-  end
-
-  def has_key?(key)  # :nodoc:
-    typo_deprecated "Why?"
-    self.class.fields.has_key?(key.to_s)
-  end
-
-  def find_already_published(content_type)  # :nodoc:
-    typo_deprecated "Use #{content_type}.find_already_published"
-    content_type.to_s.camelize.constantize.find_already_published
-  end
-
-  def current_theme_path  # :nodoc:
-    typo_deprecated "use current_theme.path"
-    Theme.themes_root + "/" + theme
-  end
-
   def requested_article(params)
     Article.find_by_params_hash(params)
   end
 
-  def requested_articles(params)
-    Article.find_all_by_date(*params.values_at(:year, :month, :day))
-  end
-
-  def articles_matching(query)
-    Article.search(query)
+  def articles_matching(query, args={})
+    Article.search(query, args)
   end
 
   def rss_limit_params
@@ -216,5 +199,17 @@ class Blog < CachedModel
       ? {} \
       : {:limit => limit}
   end
+
+  def permalink_has_identifier
+    unless permalink_format =~ /(%year%|%month%|%day%|%title%)/
+      errors.add(:permalink_format, _('You need a Format of permalink with an identifier : %%month%%, %%year%%, %%day%%, %%title%%'))
+    end
+
+    # A permalink can be finish by .atom or .rss. it's reserved to feed
+    if permalink_format =~ /\.(atom|rss)$/
+      errors.add(:permalink_format, _("Can't finish by .rss or .atom. It's reserved to be use by feed"))
+    end
+  end
+
 end
 

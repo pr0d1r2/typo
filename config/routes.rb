@@ -1,130 +1,75 @@
-module ActionController
-  module Resources
-    class InflectedResource < Resource
-      def member_path
-        @member_path ||= "#{singular_path}/:id"
-      end
-
-      def nesting_path_prefix
-        @nesting_path_prefix ||= "#{singular_path}/:#{singular}_id"
-      end
-
-      protected
-      def singular_path
-        @singular_path ||= "#{path_prefix}/#{singular}"
-      end
-    end
-
-    def inflected_resource(*entities, &block)
-      options = entities.last.is_a?(Hash) ? entities.pop : { }
-      entities.each { |entity| map_inflected_resource entity, options.dup, &block }
-    end
-
-    private
-    def map_inflected_resource(entities, options = { }, &block)
-      resource = InflectedResource.new(entities, options)
-
-      with_options :controller => resource.controller do |map|
-        map_collection_actions(map, resource)
-        map_default_collection_actions(map, resource)
-        map_new_actions(map, resource)
-        map_member_actions(map, resource)
-
-        if block_given?
-          with_options(:path_prefix => resource.nesting_path_prefix, &block)
-        end
-      end
-    end
-  end
-end
-
 ActionController::Routing::Routes.draw do |map|
 
   # default
-  map.index '', :controller  => 'articles', :action => 'index'
+  map.root :controller  => 'articles', :action => 'index'
+
+  # TODO: use only in archive sidebar. See how made other system
+  map.articles_by_month ':year/:month', :controller => 'articles', :action => 'index', :year => /\d{4}/, :month => /\d{1,2}/
+  map.articles_by_month_page ':year/:month/page/:page', :controller => 'articles', :action => 'index', :year => /\d{4}/, :month => /\d{1,2}/
+  map.articles_by_year ':year', :controller => 'articles', :action => 'index', :year => /\d{4}/
+  map.articles_by_year_page ':year/page/:page', :controller => 'articles', :action => 'index', :year => /\d{4}/
+
   map.admin 'admin', :controller  => 'admin/dashboard', :action => 'index'
 
   # make rss feed urls pretty and let them end in .xml
   # this improves caches_page because now apache and webrick will send out the
   # cached feeds with the correct xml mime type.
 
-  map.xml 'articles.rss', 
-  :controller => 'articles', :action => 'index', :format => 'rss'
-  map.xml 'articles.atom', 
-  :controller => 'articles', :action => 'index', :format => 'atom'
-  map.xml 'xml/itunes/feed.xml', :controller => 'xml', :action => 'itunes'
-  map.xml 'xml/articlerss/:id/feed.xml', :controller => 'xml', :action => 'articlerss'
-  map.xml 'xml/commentrss/feed.xml', :controller => 'xml', :action => 'commentrss'
-  map.xml 'xml/trackbackrss/feed.xml', :controller => 'xml', :action => 'trackbackrss'
-
-  map.xml 'xml/:format/feed.xml', :controller => 'xml', :action => 'feed', :type => 'feed'
-  map.xml 'xml/:format/:type/feed.xml', :controller => 'xml', :action => 'feed'
-  map.xml 'xml/:format/:type/:id/feed.xml', :controller => 'xml', :action => 'feed'
-  map.xml 'xml/rss', :controller => 'xml', :action => 'feed', :type => 'feed', :format => 'rss'
-  map.xml 'sitemap.xml', :controller => 'xml', :action => 'feed', :format => 'googlesitemap', :type => 'sitemap'
-
-  map.resources :comments, :name_prefix => 'admin_'
-  map.resources :trackbacks
-  map.resources :users
-
-  map.datestamped_resources(:articles,
-                            :collection => {
-                              :search => :get, :comment_preview => :any,
-                              :archives => :get
-                            },
-                            :member => {
-                              :markup_help => :get
-                            }) do |dated|
-    dated.resources :comments, :new => { :preview => :any }
-    dated.resources :trackbacks
-    dated.connect 'trackbacks', :controller => 'trackbacks', :action => 'create', :conditions => {:method => :post}
+  map.rss 'articles.rss', :controller => 'articles', :action => 'index', :format => 'rss'
+  map.atom 'articles.atom', :controller => 'articles', :action => 'index', :format => 'atom'
+  
+  map.with_options :controller => 'xml', :path_prefix => 'xml' do |controller|
+    controller.xml 'itunes/feed.xml', :action => 'itunes'
+    controller.xml 'articlerss/:id/feed.xml', :action => 'articlerss'
+    controller.xml 'commentrss/feed.xml', :action => 'commentrss'
+    controller.xml 'trackbackrss/feed.xml', :action => 'trackbackrss'
+    
+    controller.with_options :action => 'feed' do |action|
+      action.xml 'rss', :type => 'feed', :format => 'rss'
+      action.xml 'sitemap.xml', :format => 'googlesitemap', :type => 'sitemap', :path_prefix => nil
+      action.xml ':format/feed.xml', :type => 'feed'
+      action.xml ':format/:type/feed.xml'
+      action.xml ':format/:type/:id/feed.xml'
+    end
   end
   
+
+  map.resources :comments, :name_prefix => 'admin_', :collection => [:preview]
+  map.resources :trackbacks
+
+  map.live_search_articles '/live_search/', :controller => "articles", :action => "live_search"
+  map.search '/search/:q.:format', :controller => "articles", :action => "search"
+  map.search_base '/search/', :controller => "articles", :action => "search"
+  map.connect '/archives/', :controller => "articles", :action => "archives"
+
+  # I thinks it's useless. More investigating
   map.connect "trackbacks/:id/:day/:month/:year",
     :controller => 'trackbacks', :action => 'create', :conditions => {:method => :post}
 
-  # Redirects from old permalinks
-  map.connect "articles/:controler/:name",
-    :controller => 'redirect', :action => 'redirect'
-    map.connect "articles/:controler",
-      :controller => 'redirect', :action => 'redirect'
+  # Before use inflected_resource
+  map.resources :categories, :except => [:show, :update, :destroy, :edit]
+  map.resources :categories, :as => 'category', :only => [:show, :edit, :update, :destroy]
 
-  map.inflected_resource(:categories, :path_prefix => '')
-  map.connect '/category/:id/page/:page',
-  :controller => 'categories', :action => 'show'
+  map.connect '/category/:id/page/:page', :controller => 'categories', :action => 'show'
   
-  map.inflected_resource(:authors, :path_prefix => '')
-  
-  map.inflected_resource(:tags, :path_prefix => '')
-  map.connect '/tag/:id/page/:page',
-  :controller => 'tags', :action => 'show'
-  
-  map.resources(:feedback)
+  # Before use inflected_resource
+  map.resources :tags, :except => [:show, :update, :destroy, :edit]
+  map.resources :tags, :as => 'tag', :only => [:show, :edit, :update, :destroy]
 
+  map.connect '/tag/:id/page/:page', :controller => 'tags', :action => 'show'
+  map.connect '/tags/page/:page', :controller => 'tags', :action => 'index'
+
+  map.connect '/author/:id', :controller => 'authors', :action => 'show'
+  map.xml '/author/:id.:format', :controller => 'authors', :action => 'show', :format => /rss|atom/
+  
   # allow neat perma urls
   map.connect 'page/:page',
     :controller => 'articles', :action => 'index',
     :page => /\d+/
 
-  date_options = { :year => /\d{4}/, :month => /(?:0?[1-9]|1[12])/, :day => /(?:0[1-9]|[12]\d|3[01])/ }
+  date_options = { :year => /\d{4}/, :month => /(?:0?[1-9]|1[012])/, :day => /(?:0[1-9]|[12]\d|3[01])/ }
 
   map.with_options(:conditions => {:method => :get}) do |get|
-    get.with_options(date_options.merge(:controller => 'articles')) do |dated|
-      dated.with_options(:action => 'index') do |finder|
-        # new URL
-        finder.connect ':year/page/:page',
-          :month => nil, :day => nil, :page => /\d+/
-        finder.connect ':year/:month/page/:page',
-          :day => nil, :page => /\d+/
-        finder.connect ':year/:month/:day/page/:page', :page => /\d+/
-        finder.connect ':year',
-          :month => nil, :day => nil
-          finder.connect ':year/:month',
-            :day => nil
-          finder.connect ':year/:month/:day', :page => nil
-      end
-    end
-
     get.connect 'pages/*name',:controller => 'articles', :action => 'view_page'
 
     get.with_options(:controller => 'theme', :filename => /.*/, :conditions => {:method => :get}) do |theme|
@@ -141,13 +86,13 @@ ActionController::Routing::Routes.draw do |map|
   end
 
   # Work around the Bad URI bug
-  %w{ accounts articles backend files live sidebar textfilter xml }.each do |i|
+  %w{ accounts backend files sidebar textfilter xml }.each do |i|
     map.connect "#{i}", :controller => "#{i}", :action => 'index'
     map.connect "#{i}/:action", :controller => "#{i}"
     map.connect "#{i}/:action/:id", :controller => i, :id => nil
   end
 
-  %w{advanced blacklist cache categories comments content feedback general pages
+  %w{advanced blacklist cache categories comments content profiles feedback general pages
      resources sidebar textfilters themes trackbacks users settings tags }.each do |i|
     map.connect "/admin/#{i}", :controller => "admin/#{i}", :action => 'index'
     map.connect "/admin/#{i}/:action/:id", :controller => "admin/#{i}", :action => nil, :id => nil

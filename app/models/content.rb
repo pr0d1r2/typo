@@ -21,6 +21,32 @@ class Content < ActiveRecord::Base
 
   has_many :triggers, :as => :pending_item, :dependent => :delete_all
 
+  named_scope :published_at_like, lambda {|date_at| {:conditions => {
+    :published_at => (
+      if date_at =~ /\d{4}-\d{2}-\d{2}/
+        DateTime.strptime(date_at, '%Y-%m-%d').beginning_of_day..DateTime.strptime(date_at, '%Y-%m-%d').end_of_day
+      elsif date_at =~ /\d{4}-\d{2}/
+        DateTime.strptime(date_at, '%Y-%m').beginning_of_month..DateTime.strptime(date_at, '%Y-%m').end_of_month
+      elsif date_at =~ /\d{4}/
+        DateTime.strptime(date_at, '%Y').beginning_of_year..DateTime.strptime(date_at, '%Y').end_of_year
+      else
+        date_at
+      end
+    )}
+  }
+  }
+  named_scope :user_id, lambda {|user_id| {:conditions => ['user_id = ?', user_id]}}
+  named_scope :published, {:conditions => ['published = ?', true]}
+  named_scope :order, lambda {|order_by| {:order => order_by}}
+  named_scope :not_published, {:conditions => ['published = ?', false]}
+  named_scope :draft, {:conditions => ['state = ?', 'draft']}
+  named_scope :no_draft, {:conditions => ['state <> ?', 'draft'], :order => 'created_at DESC'}
+  named_scope :searchstring, lambda {|search_string|
+    tokens = search_string.split(' ').collect {|c| "%#{c.downcase}%"}
+    {:conditions => ['state = ? AND ' + (['(LOWER(body) LIKE ? OR LOWER(extended) LIKE ? OR LOWER(title) LIKE ?)']*tokens.size).join(' AND '),
+                        "published", *tokens.collect{ |token| [token] * 3 }.flatten]}
+  }
+
   serialize :whiteboard
 
   attr_accessor :just_changed_published_status
@@ -54,7 +80,6 @@ class Content < ActiveRecord::Base
         end
         unless self.method_defined?("#{field}_html")
           define_method("#{field}_html") do
-            typo_deprecated "Use html(:#{field})"
             html(field.to_sym)
           end
         end
@@ -132,6 +157,31 @@ class Content < ActiveRecord::Base
         dates
       end
     end
+
+    def function_search_no_draft(search_hash)
+      list_function = []
+      if search_hash.nil?
+        search_hash = {}
+      end
+
+      if search_hash[:searchstring]
+        list_function << 'searchstring(search_hash[:searchstring])'
+      end
+
+      if search_hash[:published_at] and %r{(\d\d\d\d)-(\d\d)} =~ search_hash[:published_at]
+        list_function << 'published_at_like(search_hash[:published_at])'
+      end
+
+      if search_hash[:user_id] && search_hash[:user_id].to_i > 0
+        list_function << 'user_id(search_hash[:user_id])'
+      end
+
+      if search_hash[:published]
+        list_function << 'published' if search_hash[:published].to_s == '1'
+        list_function << 'not_published' if search_hash[:published].to_s == '0'
+      end
+      list_function
+    end
   end
 
   def content_fields
@@ -154,7 +204,7 @@ class Content < ActiveRecord::Base
     elsif self.class.html_map(field)
       generate_html(field)
     else
-      raise "Unknown field: #{field.inspect} in article.html"
+      raise "Unknown field: #{field.inspect} in content.html"
     end
   end
 
@@ -272,7 +322,13 @@ class Content < ActiveRecord::Base
   end
 
   def rss_description(xml)
-    xml.description(html(blog.show_extended_on_rss ? :all : :body))
+    if respond_to?(:user) && self.user && self.user.name
+      rss_desc = "<hr /><p><small>#{_('Original article writen by')} #{self.user.name} #{_('and published on')} <a href='#{blog.base_url}'>#{blog.blog_name}</a> | <a href='#{self.permalink_url}'>#{_('direct link to this article')}</a> | #{_('If you are reading this article elsewhere than')} <a href='#{blog.base_url}'>#{blog.blog_name}</a>, #{_('it has been illegally reproduced and without proper authorization')}.</small></p>"
+    else
+      rss_desc = ""
+    end
+    post = html(blog.show_extended_on_rss ? :all : :body)
+    xml.description(blog.rss_description ? post + rss_desc : post)
   end
 
   def rss_groupings(xml)
@@ -295,13 +351,6 @@ class Content < ActiveRecord::Base
       xml.div(:xmlns => 'http://www.w3.org/1999/xhtml') { xml << html(:all) }
     end
   end
-
-
-  # deprecated
-  def full_html
-    typo_deprecated "use .html instead"
-    html
-  end
 end
 
 class Object
@@ -311,6 +360,7 @@ class Object
 end
 
 class ContentTextHelpers
+  include ActionView::Helpers::UrlHelper
   include ActionView::Helpers::TagHelper
   include ActionView::Helpers::SanitizeHelper
   include ActionView::Helpers::TextHelper

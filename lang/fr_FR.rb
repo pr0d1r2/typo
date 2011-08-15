@@ -1,6 +1,8 @@
 Localization.define('fr_FR') do |l|
   # General
   l.store "your blog", "votre blog"
+  l.store "Category", "Catégorie"
+  l.store "Archives for", "Archives de"
   l.store "Typo admin", "administration typo"
   l.store "Publish", "Écrire"
   l.store "Manage", "Gérer"
@@ -227,6 +229,16 @@ Localization.define('fr_FR') do |l|
   l.store "Blacklist", "Liste noire"
   l.store "Feedback Search", "Rechercher dans les discussions"
   l.store "Comments and Trackbacks for", "Commentaires et rétroliens pour"
+
+  #admin/feedback/index.html.erb
+  l.store "Limit to ham", "Uniquement les commentaires valides"
+  
+  #admin/feedback/article.html.erb
+  l.store "All comments", "Tous les commentaires"
+
+  #admin/feedback/create
+  l.store "Comment was successfully created.", "Commentaire crée avec succès."
+  l.store "Comment was successfully updated.", "Commentaire mis à jour avec succès."
  
   #admin/general/task
   l.store "Basic settings", "Configuration de base"
@@ -436,6 +448,10 @@ Localization.define('fr_FR') do |l|
   l.store "Active theme", "Thème actif"
   l.store "You can download third party themes from officially supported %s ", "Vous pouvez télécharger des thèmes officiellement supportés sur %s "
   l.store "dev 411 Typo themes viewer", "le visualisateur de thèmes de dev411"
+
+  #admin/themes/catalogue.html.erb
+  l.store "Theme catalogue", "Catalogue de thème"
+  l.store "Sorry the theme catalogue is not available", "Désolé le catalogue de thème n'est pas disponible"
   
   #admin/trackbacks/edit.rhtml
   l.store "Trackbacks for", "Rétroliens pour"
@@ -661,23 +677,31 @@ Localization.define('fr_FR') do |l|
   l.store "Oct", "Oct"
   l.store "Nov", "Nov"
   l.store "Dec", "Déc"
-  l.store "January", "Janvier"    
-  l.store "February", "Février"
-  l.store "March", "Mars"
-  l.store "April", "Avril"
-  l.store "May", "Mai"
-  l.store "June", "Juin"
-  l.store "July", "Juillet"
-  l.store "August", "Août"
-  l.store "September", "Septembre"
-  l.store "October", "Octobre"
-  l.store "November", "Novembre"
-  l.store "December", "Décembre"
+  l.store "January", "janvier"    
+  l.store "February", "février"
+  l.store "March", "mars"
+  l.store "April", "avril"
+  l.store "May", "mai"
+  l.store "June", "juin"
+  l.store "July", "juillet"
+  l.store "August", "août"
+  l.store "September", "septembre"
+  l.store "October", "octobre"
+  l.store "November", "novembre"
+  l.store "December", "décembre"
   l.store "%%a, %%d %%b %%Y %%H:%%M:%%S GMT", Proc.new {|date|
      sprintf( date.strftime("%%s %d %%s %Y %H:%M:%S GMT"), _(date.strftime("%a")), _(date.strftime("%b")).downcase )
   }
   l.store "%%d. %%b", Proc.new {|date|
      sprintf( date.strftime("%d. %%s"), _(date.strftime("%b")).downcase )
   }
-
+  l.store "Original article writen by", "Article original écrit par" 
+  l.store "and published on", "et publié sur"
+  l.store "direct link to this article", "lien direct vers cet article" 
+  l.store "If you are reading this article elsewhere than", "Si vous lisez cet article ailleurs que sur" 
+  l.store "it has been illegally reproduced and without proper authorization", "c'est qu'il a été reproduit illégalement et sans autorisation"
+  l.store "This will display", "Cela affichera"
+  l.store "at the bottom of each of your post in the RSS feed", "en bas de chacun de vos articles sur le flux RSS"
+  l.store "for", "pour"
+  l.store "everything about", "tout sur"
 end
